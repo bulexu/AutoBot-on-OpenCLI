@@ -57,3 +57,49 @@ test('a successful run records no failure', () => {
     store.close();
   }
 });
+
+test('the run store keeps the steps that actually ran', () => {
+  const store = new RunStore(':memory:');
+  try {
+    const runId = store.start('task-1', 'replay');
+    store.saveStep(runId, {
+      seq: 0,
+      stepId: 'read',
+      op: 'http.read',
+      status: 'succeeded',
+      rows: 12,
+      durationMs: 240,
+    });
+    store.saveStep(runId, {
+      seq: 1,
+      stepId: 'write',
+      op: 'bitable.upsert',
+      status: 'failed',
+      rows: 0,
+      target: 'detail-table',
+      durationMs: 90,
+    });
+    assert.deepEqual(store.steps(runId), [
+      {
+        seq: 0,
+        step_id: 'read',
+        op: 'http.read',
+        status: 'succeeded',
+        rows: 12,
+        target: null,
+        duration_ms: 240,
+      },
+      {
+        seq: 1,
+        step_id: 'write',
+        op: 'bitable.upsert',
+        status: 'failed',
+        rows: 0,
+        target: 'detail-table',
+        duration_ms: 90,
+      },
+    ]);
+  } finally {
+    store.close();
+  }
+});

@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateFlow } from '../flow/workflow.ts';
+import { at, validateFlow } from '../flow/workflow.ts';
 import { OpenCliError, runOpenCli } from '../integrations/opencli.ts';
 import { RunStore } from '../storage/run-store.ts';
 import type { ExecutionOptions } from './execute.ts';
@@ -142,18 +142,24 @@ cli({
       const runId = store.start(request.taskId, request.mode);
       let result: unknown;
       try {
-        result = await runOpenCli(this.command(['autobot', 'run', '-f', 'json'], 300_000), {
-          manifest,
-          workflow,
-          database,
-          runId,
-          mode: request.mode,
-          bindings,
-          credentials: Array.from(request.credentials ?? [], ([name, credential]) => ({
-            name,
-            ...credential,
-          })),
-        });
+        const paced = workflow.steps.some(
+          (step) => step.op === 'competitor.monthly' && step.requestIntervalParameter,
+        );
+        result = await runOpenCli(
+          this.command(['autobot', 'run', '-f', 'json'], paced ? 1_800_000 : 300_000),
+          {
+            manifest,
+            workflow,
+            database,
+            runId,
+            mode: request.mode,
+            bindings,
+            credentials: Array.from(request.credentials ?? [], ([name, credential]) => ({
+              name,
+              ...credential,
+            })),
+          },
+        );
       } catch (error) {
         // The worker may already have recorded the reason. Read it back so the
         // parent does not overwrite a good diagnosis with a bare status.
@@ -166,7 +172,10 @@ cli({
         });
         throw new Error(`Run ${runId} failed`, { cause: error });
       }
-      store.finish(runId, 'succeeded');
+      const warnings = at(result, 'warnings');
+      if (Array.isArray(warnings) && warnings.length) {
+        store.finish(runId, 'incomplete', { code: 'PARTIAL_RESULT', message: warnings.join('\n') });
+      } else store.finish(runId, 'succeeded');
       return { runId, result };
     } finally {
       store.close();

@@ -1,0 +1,7 @@
+# Vendored registry components are kept exactly as published upstream, so they
+# are not reformatted. `scripts/vendor-registry.mjs` rewrites them on purpose.
+src/desktop/renderer/components/ui/
+src/desktop/renderer/components/ai-elements/
+
+# Build output
+renderer-dist/

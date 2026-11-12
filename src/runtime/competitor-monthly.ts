@@ -1,3 +1,5 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import { RetryableReadError } from '../integrations/read-retry.ts';
 import type { RecordData } from '../flow/workflow.ts';
 import { createBitableWriter } from '../integrations/bitable.ts';
 import { createFeishuRecords } from '../integrations/feishu-fields.ts';
@@ -99,19 +101,42 @@ export function createCompetitorMonthlyRunner(
       string,
       { product: string; line: string; company: string; sales: number; amount: number }
     >();
-    const missing: string[] = [];
+    const incompleteGroups = new Set<string>();
+    let rateLimited = false;
+    let nextRequestAt = 0;
+    const paceRequest = async () => {
+      const wait = nextRequestAt - performance.now();
+      if (wait > 0) await delay(Math.ceil(wait));
+      nextRequestAt = performance.now() + step.requestIntervalMs;
+    };
     const selected = [...candidates.values()]
       .filter((candidate) => !productFilter || candidate.product === productFilter)
       .slice(0, options.mode === 'preview' && !productFilter ? 2 : undefined);
     for (const candidate of selected) {
       const { site, asin, product, line, company } = candidate;
+      const groupKey = JSON.stringify([product, line, company]);
       const rate = rates.get(site);
-      if (!rate) throw new Error(`Exchange rate is missing for ${site}`);
-      const monthly = await readMonthlySales(sellerSecret, rate.marketplace, asin, step.month);
-      if (!monthly) {
-        missing.push(`${rate.marketplace}/${asin}`);
+      let monthly;
+      try {
+        if (rateLimited) throw new Error('本次运行已触发限流保护');
+        if (!rate) throw new Error('缺少站点汇率');
+        monthly = await readMonthlySales(
+          sellerSecret,
+          rate.marketplace,
+          asin,
+          step.month,
+          paceRequest,
+        );
+        if (!monthly) throw new Error(`缺少 ${step.month} 月度数据`);
+      } catch (error) {
+        incompleteGroups.add(groupKey);
+        if (error instanceof RetryableReadError && /rate limit|429/.test(error.message))
+          rateLimited = true;
+        const message = error instanceof Error ? error.message : 'API 请求失败';
+        options.onWarning?.(`${site}/${asin}：${message}`);
         continue;
       }
+      if (!rate) continue;
       const amount = monthly.amount * rate.rate;
       const detailRow = {
         月份: step.month,
@@ -127,27 +152,26 @@ export function createCompetitorMonthlyRunner(
       };
       detail.push(detailRow);
       options.savePage?.(step.id, detail.length, [detailRow]);
-      const groupKey = JSON.stringify([product, line, company]);
       const group = groups.get(groupKey) ?? { product, line, company, sales: 0, amount: 0 };
       group.sales += monthly.sales;
       group.amount += amount;
       groups.set(groupKey, group);
     }
-    if (missing.length)
-      throw new Error(
-        `Missing ${step.month} sales for ${missing.length} of ${selected.length} requests (first: ${missing[0]})`,
-      );
     if (detail.length === 0) throw new Error(`No competitor sales found for ${step.month}`);
+    if (incompleteGroups.size)
+      options.onWarning?.(`跳过 ${incompleteGroups.size} 个数据不完整的汇总组`);
 
-    const summary = [...groups.values()].map((group) => ({
-      月份: step.month,
-      产品名: group.product,
-      产品线: group.line,
-      公司: group.company,
-      销量: group.sales,
-      客单价: group.sales ? group.amount / group.sales : 0,
-      预估销额: group.amount,
-    }));
+    const summary = [...groups.entries()]
+      .filter(([key]) => !incompleteGroups.has(key))
+      .map(([, group]) => ({
+        月份: step.month,
+        产品名: group.product,
+        产品线: group.line,
+        公司: group.company,
+        销量: group.sales,
+        客单价: group.sales ? group.amount / group.sales : 0,
+        预估销额: group.amount,
+      }));
     const outputs = [
       {
         stepId: 'detail',

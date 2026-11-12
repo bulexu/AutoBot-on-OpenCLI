@@ -1,3 +1,11 @@
+import { flowExpression } from './expression.ts';
+import { validateInputs } from './inputs.ts';
+import type { FlowInput } from './inputs.ts';
+
+export function validMonth(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
+}
+
 export type RecordData = Record<string, unknown>;
 
 type Field =
@@ -37,25 +45,38 @@ type ReadStep = {
   body?: RecordData;
   recordsPath: string;
   from?: string;
+  parameters?: { query?: Record<string, string>; body?: Record<string, string> };
   bind?: { query?: Record<string, string>; body?: Record<string, string> };
   pagination?: HttpPagination;
+  responseMode?: 'exchange';
+  intervalParameter?: string;
+  retry?: { path: string; value: string; waitMs: number };
+  stopOnRateLimit?: boolean;
 };
 
 type MapStep = { id: string; op: 'records.map'; from: string; fields: Record<string, Field> };
-type WriteStep = { id: string; op: 'bitable.upsert'; from: string; target: string; key: string };
+type WriteStep = {
+  id: string; op: 'bitable.upsert'; from: string; target: string; key: string;
+  baseToken?: string; keyExpression?: string;
+};
+type BitableReadStep = { id: string; op: 'bitable.read'; baseToken: string; table: string };
+type TransformStep = { id: string; op: 'records.transform'; sources: string[]; expression: string };
 export type CompetitorStep = {
   id: string;
   op: 'competitor.monthly';
   tool: 'asin_sales_trend';
-  month: string;
+  month?: string;
+  monthParameter?: string;
+  requestIntervalParameter?: string;
   baseToken: string;
   tables: { rates: string; competitors: string; detail: string; summary: string };
 };
-type Step = ReadStep | MapStep | WriteStep | CompetitorStep;
+type Step = ReadStep | MapStep | WriteStep | CompetitorStep | BitableReadStep | TransformStep;
 
 export type Workflow = { steps: Step[] };
 export type Manifest = {
   schemaVersion: 1;
+  inputs?: FlowInput[];
   id: string;
   version: string;
   endpoints: { method: 'GET' | 'POST'; origin: string; path: string }[];
@@ -152,6 +173,8 @@ export function validateFlow(manifestValue: unknown, workflowValue: unknown) {
   if (!Array.isArray(workflow.steps) || workflow.steps.length === 0) {
     throw new Error('Workflow must contain steps');
   }
+  const inputs = validateInputs(manifest.inputs);
+  const legacy = manifest.inputs === undefined;
   const outputs = new Set<string>();
   const ids = new Set<string>();
   for (const value of workflow.steps) {
@@ -163,8 +186,36 @@ export function validateFlow(manifestValue: unknown, workflowValue: unknown) {
       case 'competitor.monthly': {
         if (step.tool !== 'asin_sales_trend') throw new Error('Unsupported competitor sales tool');
         if (workflow.steps.length !== 1) throw new Error('Monthly sales must be the sole step');
-        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(string(step.month, 'month'))) {
-          throw new Error('Invalid reporting month');
+        if (
+          legacy &&
+          validMonth(step.month) &&
+          (step.monthParameter === undefined || step.monthParameter === 'month')
+        ) {
+          inputs.push({
+            key: 'month',
+            label: '抓取月份',
+            type: 'month',
+            required: true,
+            default: step.month,
+          });
+        } else if (
+          !inputs.some(
+            (input) =>
+              input.key ===
+                (step.monthParameter ?? (validMonth(step.month) ? 'month' : undefined)) &&
+              input.type === 'month' &&
+              (input.required || input.default !== undefined),
+          )
+        ) {
+          throw new Error('竞品步骤需绑定已声明的月份参数');
+        }
+        if (
+          step.requestIntervalParameter !== undefined &&
+          !inputs.some(
+            (input) => input.key === step.requestIntervalParameter && input.type === 'number',
+          )
+        ) {
+          throw new Error('竞品步骤需绑定已声明的请求间隔数值参数');
         }
         string(step.baseToken, 'Feishu base token');
         const tables = object(step.tables, 'Feishu table bindings');
@@ -186,6 +237,17 @@ export function validateFlow(manifestValue: unknown, workflowValue: unknown) {
         if (step.from !== undefined && !outputs.has(string(step.from, 'source step'))) {
           throw new Error('HTTP input requires a preceding record output');
         }
+        if (step.parameters !== undefined) {
+          const parameters = object(step.parameters, 'HTTP parameters');
+          for (const [location, entries] of Object.entries(parameters)) {
+            if (location !== 'query' && (location !== 'body' || method !== 'POST'))
+              throw new Error('Invalid HTTP parameter location');
+            for (const key of Object.values(object(entries, 'HTTP parameter references'))) {
+              if (!inputs.some((input) => input.key === key))
+                throw new Error('HTTP 参数引用未声明的流程参数');
+            }
+          }
+        }
         if (step.bind !== undefined) {
           if (step.from === undefined) throw new Error('HTTP bindings require a source step');
           const bindings = object(step.bind, 'HTTP bindings');
@@ -206,6 +268,20 @@ export function validateFlow(manifestValue: unknown, workflowValue: unknown) {
           if (method !== 'POST') throw new Error('Only POST reads support a request body');
           object(step.body, 'request body');
         }
+        if (step.responseMode !== undefined && (step.responseMode !== 'exchange' || !step.from || step.pagination))
+          throw new Error('HTTP exchange requires source records and a single response');
+        if (step.intervalParameter !== undefined && !inputs.some(
+          (input) => input.key === step.intervalParameter && input.type === 'number',
+        )) throw new Error('HTTP interval requires a declared numeric input');
+        if (step.retry !== undefined) {
+          const retry = object(step.retry, 'HTTP retry condition');
+          string(retry.path, 'retry path');
+          string(retry.value, 'retry value');
+          integer(retry.waitMs, 0, 'retry wait');
+          if (Number(retry.waitMs) > 60_000) throw new Error('HTTP retry wait exceeds 60 seconds');
+        }
+        if (step.stopOnRateLimit !== undefined && typeof step.stopOnRateLimit !== 'boolean')
+          throw new Error('Invalid HTTP rate-limit policy');
         if (step.pagination !== undefined) {
           const page = object(step.pagination, 'pagination');
           validatePagination(page, method);
@@ -213,6 +289,17 @@ export function validateFlow(manifestValue: unknown, workflowValue: unknown) {
         outputs.add(id);
         break;
       }
+      case 'bitable.read':
+        string(step.baseToken, 'Feishu base token');
+        string(step.table, 'Feishu table');
+        outputs.add(id);
+        break;
+      case 'records.transform':
+        if (!Array.isArray(step.sources) || !step.sources.every((source) => outputs.has(source)))
+          throw new Error('Transformation requires preceding record sources');
+        flowExpression(string(step.expression, 'record expression'));
+        outputs.add(id);
+        break;
       case 'records.map':
         if (!outputs.has(string(step.from, 'source step')))
           throw new Error('Mapping requires a preceding record output');
@@ -234,14 +321,19 @@ export function validateFlow(manifestValue: unknown, workflowValue: unknown) {
         if (!outputs.has(string(step.from, 'source step')))
           throw new Error('Upsert requires a preceding record output');
         string(step.target, 'target binding');
-        string(step.key, 'source key field');
+        if (step.baseToken !== undefined) string(step.baseToken, 'Feishu base token');
+        if (step.keyExpression !== undefined) flowExpression(string(step.keyExpression, 'record key expression'));
+        else string(step.key, 'source key field');
         break;
       default:
         throw new Error(`Unsupported operator: ${String(step.op)}`);
     }
   }
 
-  return { manifest: manifest as Manifest, workflow: workflow as Workflow };
+  return {
+    manifest: { ...manifest, ...(inputs.length ? { inputs } : {}) } as Manifest,
+    workflow: workflow as Workflow,
+  };
 }
 
 export function at(value: unknown, path: string): unknown {
@@ -293,4 +385,4 @@ export function mapRecord(row: RecordData, fields: MapStep['fields']): RecordDat
   );
 }
 
-export type { ReadStep, WriteStep };
+export type { BitableReadStep, ReadStep, WriteStep };

@@ -9,8 +9,25 @@ const [command, file = 'examples/competitor-sales-2026-10.flow', scope] = proces
 if (command === 'pack') {
   const manifest = {
     id: 'competitor-monthly-sales',
-    version: '1.0.0',
+    version: '1.1.0',
     schemaVersion: 1,
+    inputs: [
+      {
+        key: 'month',
+        label: '抓取月份',
+        type: 'month',
+        required: true,
+        default: scope ?? '2026-10',
+      },
+      {
+        key: 'requestIntervalMs',
+        label: '卖家精灵请求间隔（毫秒）',
+        type: 'number',
+        default: 2000,
+        min: 0,
+        max: 10000,
+      },
+    ],
     endpoints: [{ method: 'POST', origin: 'https://mcp.sellersprite.com', path: '/mcp' }],
   };
   const workflow = {
@@ -19,7 +36,8 @@ if (command === 'pack') {
         id: 'monthly-sales',
         op: 'competitor.monthly',
         tool: 'asin_sales_trend',
-        month: scope ?? '2026-10',
+        monthParameter: 'month',
+        requestIntervalParameter: 'requestIntervalMs',
         baseToken: 'ViXsbD4aLa3ja5ss0jtcyPedngh',
         tables: {
           rates: 'tbl4IFfAMtykDmb2',

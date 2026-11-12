@@ -5,14 +5,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron';
 import { DesignConversation, RpaConversation } from '../design/conversation.ts';
 import { parseModelConfig, publicModelConfig } from '../design/model-config.ts';
-import { createProposer, createRpaProposer } from '../design/model.ts';
+import { createDesignGuide, createProposer, createRpaProposer } from '../design/model.ts';
 import { startDesign } from '../design/session.ts';
 import { importFlowPackage } from '../flow/package.ts';
+import { resolveInputs } from '../flow/inputs.ts';
 import { at } from '../flow/workflow.ts';
 import { bundledOpenCliEntry } from '../integrations/opencli.ts';
 import { OpenCliRunner } from '../runtime/opencli-runner.ts';
 import { RunStore } from '../storage/run-store.ts';
 import { bindingFields, mergeDesktopBindings, readDesktopBindings } from './flow-bindings.ts';
+
+import { dueOccurrence, parseFlowPreferences, savedInputs } from './flow-preferences.ts';
+import type { FlowPreferences } from './flow-preferences.ts';
 
 const directory = fileURLToPath(new URL('.', import.meta.url));
 const page = join(directory, 'index.html');
@@ -150,17 +154,42 @@ else
         }
       }
 
+      function preferencesPath(id: string) {
+        return flowPath(id) + '.settings.json';
+      }
+
+      async function preferences(id: string): Promise<FlowPreferences> {
+        try {
+          return JSON.parse(await readFile(preferencesPath(id), 'utf8')) as FlowPreferences;
+        } catch (error) {
+          if (missing(error)) return {};
+          throw error;
+        }
+      }
+
+      async function savePreferences(id: string, value: FlowPreferences) {
+        await saveFile(preferencesPath(id), Buffer.from(JSON.stringify(value)));
+      }
+
       async function status() {
         const flows = await installedFlows();
         const id = await selectedId(flows);
         const active = flows.find((item) => item.manifest.id === id);
         const step = active?.workflow.steps.find((step) => step.op === 'competitor.monthly');
         const fields = active ? bindingFields(active.workflow) : undefined;
+        const configurations = await Promise.all(
+          flows.map((item) => preferences(item.manifest.id)),
+        );
+        const config = active ? configurations[flows.indexOf(active)] : {};
         const ready = await Promise.all(flows.map((item) => credentialsReady(item)));
         return {
           id: active?.manifest.id,
           version: active?.manifest.version,
-          month: step?.month,
+          inputs: active?.manifest.inputs ?? [],
+          inputValues: savedInputs(config, active?.manifest.inputs ?? []),
+          alias: config.alias,
+          cron: config.cron,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           credentialsSaved: active ? Boolean(ready[flows.indexOf(active)]) : false,
           ...(await runtime),
           fields,
@@ -175,6 +204,7 @@ else
           fixedTables: step?.tables,
           flows: flows.map((item, index) => ({
             id: item.manifest.id,
+            alias: configurations[index].alias,
             version: item.manifest.version,
             credentialsSaved: ready[index],
             credentialCount: bindingFields(item.workflow).credentials.length,
@@ -214,9 +244,14 @@ else
           ) {
             throw new Error('Unrecognized desktop request');
           }
-          const readOnly = ['flow:status', 'model:get', 'runtime:status', 'runs:list'].includes(
-            channel,
-          );
+          const readOnly = [
+            'flow:status',
+            'model:get',
+            'runtime:status',
+            'runs:list',
+            'runs:task',
+            'runs:detail',
+          ].includes(channel);
           if (readOnly) return action(value);
           if (running || mutationPending) throw new Error('请等待当前操作结束');
           mutationPending = true;
@@ -267,18 +302,12 @@ else
         return status();
       });
 
-      handle('flow:run', async (value) => {
+      async function runInstalled(
+        active: ReturnType<typeof importFlowPackage>,
+        mode: 'preview' | 'replay',
+        inputs?: unknown,
+      ) {
         if (!(await runtime).ready) throw new Error('OpenCLI 未就绪，请重启工作台');
-        const active = await flow();
-        if (!active) throw new Error('请先导入流程');
-        if (
-          typeof value !== 'object' ||
-          value === null ||
-          !('mode' in value) ||
-          (value.mode !== 'preview' && value.mode !== 'replay')
-        ) {
-          throw new Error('运行参数无效');
-        }
         if (!(await credentialsReady(active))) throw new Error('请先保存该流程的凭证');
         const fields = bindingFields(active.workflow);
         const encrypted =
@@ -289,26 +318,101 @@ else
           ? JSON.parse((await safeStorage.decryptStringAsync(encrypted)).result)
           : { values: [] };
         const { bindings, credentials } = readDesktopBindings(active.workflow, configuration);
+        const resolvedInputs = resolveInputs(active.manifest.inputs ?? [], inputs);
         if (running) throw new Error('已有流程正在运行');
         running = true;
         try {
           return await runner.run({
             ...active,
             taskId: active.manifest.id,
-            mode: value.mode,
-            bindings,
+            mode,
+            bindings: { ...bindings, inputs: resolvedInputs },
             credentials,
           });
         } finally {
           running = false;
         }
+      }
+
+      handle('flow:run', async (value) => {
+        const active = await flow();
+        if (!active) throw new Error('请先导入流程');
+        if (
+          !value ||
+          typeof value !== 'object' ||
+          !('mode' in value) ||
+          (value.mode !== 'preview' && value.mode !== 'replay')
+        )
+          throw new Error('运行参数无效');
+        const inputs =
+          'inputs' in value
+            ? value.inputs
+            : savedInputs(await preferences(active.manifest.id), active.manifest.inputs ?? []);
+        return runInstalled(active, value.mode, inputs);
       });
+
+      handle('flow:preferences', async (value) => {
+        const active = await flow();
+        if (!active) throw new Error('请先导入流程');
+        const id = active.manifest.id;
+        const next = parseFlowPreferences(
+          value,
+          active.manifest.inputs ?? [],
+          await preferences(id),
+        );
+        await savePreferences(id, next);
+        return status();
+      });
+
+      async function scheduleTick() {
+        if (running || mutationPending) return;
+        mutationPending = true;
+        try {
+          for (const active of await installedFlows()) {
+            const id = active.manifest.id;
+            const config = await preferences(id);
+            const due = dueOccurrence(config);
+            if (due === undefined || !(await runtime).ready || !(await credentialsReady(active)))
+              continue;
+            await savePreferences(id, { ...config, since: due });
+            try {
+              await runInstalled(
+                active,
+                'replay',
+                savedInputs(config, active.manifest.inputs ?? []),
+              );
+            } catch (error) {
+              console.error('Scheduled workflow failed:', id, error);
+            }
+            window.webContents.send('runs:changed');
+          }
+        } finally {
+          mutationPending = false;
+        }
+      }
+
+      const timer = setInterval(() => {
+        void scheduleTick().catch((error) => console.error('Scheduler tick failed:', error));
+      }, 5000);
+      app.once('before-quit', () => clearInterval(timer));
 
       handle('runs:task', async (value) => {
         if (typeof value !== 'string') throw new Error('无效的任务标识');
         const store = new RunStore(database);
         try {
           return store.recentRuns().filter((run) => run.task_id === value);
+        } finally {
+          store.close();
+        }
+      });
+
+      handle('runs:detail', async (value) => {
+        if (typeof value !== 'string' || !value.trim()) throw new Error('无效的执行标识');
+        const store = new RunStore(database);
+        try {
+          const run = store.recentRuns().find((item) => item.id === value);
+          if (!run) throw new Error('未找到该执行记录');
+          return { ...run, steps: store.steps(value) };
         } finally {
           store.close();
         }
@@ -389,31 +493,40 @@ else
         running = true;
         design = undefined;
         try {
-          return await conversation.send(value, async (input) => {
-            const config = await loadModelConfig();
-            if (!config)
-              return {
-                ready: false,
-                message: '设计资料已收集。请先到系统设置保存模型配置，再发一条消息继续。',
-              };
-            design = await startDesign(
-              input,
-              createProposer({ apiKey: config.ak, model: config.model, baseURL: config.base_url }),
-              async (flow, credentials) => {
-                const trial = await runner.run({
-                  ...flow,
-                  taskId: flow.manifest.id,
-                  mode: 'preview',
-                  credentials,
-                });
-                const count = at(trial.result, 'writes.0.count');
-                if (typeof count !== 'number' || count < 1)
-                  throw new Error('试跑未返回可验证的记录');
-                return trial;
-              },
-            );
-            return design.state;
-          });
+          const config = await loadModelConfig();
+          const options = config
+            ? { apiKey: config.ak, model: config.model, baseURL: config.base_url }
+            : undefined;
+          return await conversation.send(
+            value,
+            async (input) => {
+              if (!options)
+                return {
+                  ready: false,
+                  message: '设计资料已收集。请先到系统设置保存模型配置，再发一条消息继续。',
+                };
+              design = await startDesign(
+                input,
+                createProposer(options),
+                async (flow, credentials) => {
+                  const trial = await runner.run({
+                    ...flow,
+                    taskId: flow.manifest.id,
+                    mode: 'preview',
+                    credentials,
+                  });
+                  const count = at(trial.result, 'writes.0.count');
+                  if (typeof count !== 'number' || count < 1)
+                    throw new Error('试跑未返回可验证的记录');
+                  return trial;
+                },
+              );
+              return design.state;
+            },
+            options
+              ? createDesignGuide(options)
+              : async (_turns, nextMaterial) => '请先到系统设置保存模型配置。' + nextMaterial,
+          );
         } finally {
           running = false;
         }

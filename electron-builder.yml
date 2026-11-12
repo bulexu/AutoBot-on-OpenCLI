@@ -5,6 +5,7 @@ directories:
   output: dist
 files:
   - src/**/*
+  - renderer-dist/**/*
   - package.json
 win:
   target:

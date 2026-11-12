@@ -61,9 +61,13 @@ export async function executeOpenCliCommand(input: Readable) {
   try {
     return await executeFlow(manifest, workflow, {
       ...bindServices(credentials, bindings),
+      inputs: bindings.inputs ?? (bindings.month ? { month: bindings.month } : undefined),
       mode,
       credentials,
       savePage: (step, page, records) => store.savePage(runId, step, page, records),
+      // The step trace is written as the run proceeds, so the parent can read
+      // it back even when the worker dies mid-flight.
+      onStep: (outcome) => store.saveStep(runId, outcome),
     });
   } catch (error) {
     // Record the reason inside the worker so the parent can read it back even

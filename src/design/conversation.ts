@@ -1,8 +1,9 @@
-import type { RpaProposal, RpaTurn } from './model.ts';
+import type { DesignTurn, RpaProposal, RpaTurn } from './model.ts';
 import { parseCurl, responseShape } from './source.ts';
 
 type DesignInput = { curl: string; sample: string; goal: string; readOnlyPost: boolean };
 type DesignResult = { ready: boolean; message?: string };
+type Guide = (turns: DesignTurn[], nextMaterial: string) => Promise<string>;
 type Design = (input: DesignInput) => Promise<DesignResult>;
 
 export class DesignConversation {
@@ -12,7 +13,13 @@ export class DesignConversation {
   private readOnlyPost = false;
   private awaitingPostConfirmation = false;
 
-  async send(message: string, design: Design) {
+  private turns: DesignTurn[] = [];
+
+  async send(
+    message: string,
+    design: Design,
+    guide?: Guide,
+  ): Promise<{ reply: string; confirmPost?: boolean; result?: DesignResult }> {
     const text = message.trim();
     if (!text || text.length > 128_000) throw new Error('消息为空或过长');
 
@@ -23,6 +30,7 @@ export class DesignConversation {
       .replace(/```(?:bash|sh|shell|curl|json)?[ \t]*\r?\n[\s\S]*?```/gi, '')
       .trim();
     if (prose) parts.push(prose);
+    const conversationalParts: string[] = [];
 
     for (const part of parts) {
       if (/^curl\s/.test(part)) {
@@ -36,15 +44,32 @@ export class DesignConversation {
         this.readOnlyPost = true;
         this.awaitingPostConfirmation = false;
       } else {
+        if (
+          /\bcurl\s+(?:-|https?:\/\/)|(?:password|authorization|cookie|(?:api|secret)[_ -]?key|密码|验证码)\s*[:：=]\s*\S|\bBearer\s+\S/i.test(
+            part,
+          )
+        ) {
+          throw new Error('请移除描述中的凭证，并将 cURL 放在独立消息或代码块中');
+        }
+        conversationalParts.push(part);
         const combined = [this.goal, part].filter(Boolean).join('\n');
         if (combined.length > 4000) throw new Error('同步目标过长，请新建会话并简化目标');
         this.goal = combined;
       }
     }
 
+    const userText = conversationalParts.join('\n') || '已在客户端提交接口资料。';
+    this.turns.push({ role: 'human', text: userText });
+    this.turns = this.turns.slice(-12);
+    const ask = async (nextMaterial: string) => {
+      const reply = guide ? await guide(this.turns, nextMaterial) : nextMaterial;
+      this.turns.push({ role: 'assistant', text: reply });
+      return { reply };
+    };
+
     if (!this.goal)
-      return { reply: '你希望这个流程完成什么任务？可以告诉我同步的字段和用来匹配记录的键。' };
-    if (!this.curl) return { reply: '请贴一条源 API 的 cURL 请求。我会在本机提取请求头凭证。' };
+      return ask('你希望这个流程完成什么任务？可以告诉我同步的字段和用来匹配记录的键。');
+    if (!this.curl) return ask('请贴一条源 API 的 cURL 请求。我会在本机提取请求头凭证。');
     try {
       parseCurl(this.curl, this.readOnlyPost);
     } catch (error) {
@@ -59,7 +84,7 @@ export class DesignConversation {
       return { reply: message };
     }
     if (!this.sample)
-      return { reply: '请贴一份脱敏的 JSON 响应。接口有分页时，可以补充下一页字段和停止规则。' };
+      return ask('请贴一份脱敏的 JSON 响应。接口有分页时，可以补充下一页字段和停止规则。');
 
     const result = await design({
       curl: this.curl,
@@ -69,7 +94,7 @@ export class DesignConversation {
     });
     return {
       reply: result.ready
-        ? '只读试跑已通过。请核对草稿和预览，然后到 Dashboard 确认导出。'
+        ? '只读试跑已通过。请核对草稿和预览，然后在工作台确认导出。'
         : (result.message ?? '试跑尚未通过。请补充接口细节或更换响应样例。'),
       result,
     };

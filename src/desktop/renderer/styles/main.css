@@ -1,0 +1,138 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './app.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Autobot design tokens.
+ *
+ * The palette is the one already documented in docs/stitch-design/README.md
+ * (Inter-style sans, #2563eb accent, #f4f5f8 canvas, 4/6/10px radii), restated
+ * as Tailwind v4 theme variables so shadcn-vue components and the hand-written
+ * markup read from the same source.
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font-sans: 'Instrument Sans', 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --color-canvas: #f4f5f8;
+  --color-surface: #ffffff;
+  --color-surface-low: #fafbfc;
+  --color-surface-hover: #f1f3f7;
+  --color-line: #e2e4e9;
+  --color-line-strong: #cfd4de;
+
+  --color-ink: #111827;
+  --color-ink-soft: #4b5563;
+  --color-muted-text: #6b7280;
+
+  --color-accent-brand: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-soft: #eff4ff;
+  --color-accent-line: #bfd4fd;
+
+  --color-good: #059669;
+  --color-good-soft: #ecfdf5;
+  --color-good-ink: #065f46;
+  --color-warn: #b45309;
+  --color-warn-soft: #fef6ec;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fef2f2;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --radius: 6px;
+  --radius-xl: 10px;
+}
+
+/*
+ * shadcn-vue semantic layer.
+ *
+ * The registry components reference these names (bg-background, text-muted-
+ * foreground, border-border, …), so they map onto the Autobot palette instead
+ * of shadcn's default neutral ramp.
+ */
+:root {
+  --radius: 6px;
+  --background: var(--color-canvas);
+  --foreground: var(--color-ink);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-ink);
+  --primary: var(--color-accent-brand);
+  --primary-foreground: #ffffff;
+  --secondary: var(--color-surface-hover);
+  --secondary-foreground: var(--color-ink-soft);
+  --muted: var(--color-surface-low);
+  --muted-foreground: var(--color-muted-text);
+  --accent: var(--color-accent-soft);
+  --accent-foreground: var(--color-accent-brand);
+  --destructive: var(--color-danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--color-line);
+  --input: var(--color-line-strong);
+  --ring: var(--color-accent-brand);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 10px;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  h1,
+  h2,
+  h3,
+  p,
+  dl,
+  dd {
+    margin: 0;
+  }
+  button {
+    font: inherit;
+    cursor: pointer;
+  }
+  button:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent-brand);
+    outline-offset: 2px;
+  }
+}

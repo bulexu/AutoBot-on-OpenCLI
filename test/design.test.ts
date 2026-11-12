@@ -171,6 +171,45 @@ test('design conversation collects API materials across turns and asks for POST 
   assert.equal(calls, 1);
 });
 
+test('API design uses the configured model during intake and keeps raw materials local', async (t) => {
+  const { DesignConversation } = await import('../src/design/conversation.ts');
+  const { createDesignGuide } = await import('../src/design/model.ts');
+  const requests: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (_input: string | URL | Request, init?: RequestInit) => {
+    requests.push(String(init?.body));
+    return Response.json({
+      id: 'fixture',
+      object: 'chat.completion',
+      model: 'fixture',
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: '请提供订单接口资料 ' + requests.length },
+        },
+      ],
+    });
+  });
+  const guide = createDesignGuide({
+    apiKey: 'fixture',
+    model: 'fixture',
+    baseURL: 'https://model.example/v1',
+  });
+  const chat = new DesignConversation();
+  const design = async () => assert.fail('Drafting requires a response sample');
+  const first = await chat.send('同步订单', design, guide);
+  assert.equal(first.reply, '请提供订单接口资料 1');
+  const next = await chat.send(
+    'curl https://source.example/orders -H "Authorization: Bearer keep-local"',
+    design,
+    guide,
+  );
+  assert.equal(next.reply, '请提供订单接口资料 2');
+  assert.match(requests[1], /同步订单/);
+  assert.match(requests[1], /请提供订单接口资料 1/);
+  assert.doesNotMatch(requests[1], /keep-local|source\.example/);
+});
+
 test('RPA design asks for clarification and carries the reply into the next turn', async () => {
   const { RpaConversation } = await import('../src/design/conversation.ts');
   const chat = new RpaConversation();

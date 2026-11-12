@@ -306,3 +306,104 @@ test('pagination limit stops replay before write and still allows bounded previe
   const preview = await executeFlow(manifest, capped, { mode: 'preview', fetch: read });
   assert.equal(preview.writes[0].count, 2);
 });
+
+test('each step reports what it produced so the run can be replayed in the UI', async () => {
+  const store = new RunStore(':memory:');
+  try {
+    const result = await runTask(store, 'task-1', manifest, workflow, {
+      mode: 'replay',
+      fetch: fixture,
+      upsert: async () => {},
+    });
+    const steps = store.steps(result.runId);
+    assert.deepEqual(
+      steps.map((step) => [step.step_id, step.op, step.status, step.rows]),
+      [
+        ['items', 'http.read', 'succeeded', 2],
+        ['mapped', 'records.map', 'succeeded', 2],
+        ['details', 'bitable.upsert', 'succeeded', 2],
+      ],
+    );
+    assert.equal(steps[2].target, 'detail-table');
+  } finally {
+    store.close();
+  }
+});
+
+test('a failing step is reported as failed and the later steps never run', async () => {
+  const store = new RunStore(':memory:');
+  try {
+    await assert.rejects(
+      runTask(store, 'task-1', manifest, workflow, {
+        mode: 'replay',
+        fetch: async () => new Response(null, { status: 401 }),
+        upsert: async () => assert.fail('A failed read must never reach the writer'),
+      }),
+      /failed/,
+    );
+    const run = store.recentRuns()[0];
+    const steps = store.steps(run.id);
+    assert.deepEqual(
+      steps.map((step) => [step.step_id, step.status]),
+      [['items', 'failed']],
+    );
+    assert.equal(run.failure_code, 'CREDENTIAL_INVALID');
+    assert.equal(run.failed_step, 'items');
+  } finally {
+    store.close();
+  }
+});
+
+test('read-only calls retry rate limits without retrying a write', async () => {
+  const { fetchRead, retryRead } = await import('../src/integrations/read-retry.ts');
+  let requests = 0;
+  const result = await retryRead(() =>
+    fetchRead(
+      async () => {
+        requests++;
+        return requests === 1
+          ? new Response(null, { status: 429, headers: { 'retry-after': '0' } })
+          : Response.json({ ok: true });
+      },
+      'https://source.example/items',
+      { method: 'GET' },
+    ),
+  );
+  assert.equal(result.ok, true);
+  assert.equal(requests, 2);
+});
+
+test('manifest inputs bind generic HTTP requests with typed defaults and supplied values', async () => {
+  const definition = {
+    ...manifest,
+    inputs: [
+      { key: 'period', label: '报告期', type: 'month', required: true },
+      { key: 'count', label: '数量', type: 'number', default: 4 },
+      { key: 'archived', label: '归档', type: 'boolean', default: false },
+    ],
+  };
+  const workflow = {
+    steps: [
+      {
+        id: 'read',
+        op: 'http.read',
+        url: 'https://source.example/items',
+        recordsPath: '$',
+        parameters: { query: { month: 'period', limit: 'count', archived: 'archived' } },
+      },
+    ],
+  };
+  await executeFlow(definition, workflow, {
+    mode: 'preview',
+    inputs: { period: '2026-09' },
+    fetch: async (url) => {
+      assert.deepEqual(Object.fromEntries(new URL(String(url)).searchParams), {
+        month: '2026-09',
+        limit: '4',
+        archived: 'false',
+      });
+      return Response.json([]);
+    },
+  });
+  await assert.rejects(executeFlow(definition, workflow, { mode: 'preview' }), /请填写 报告期/);
+});

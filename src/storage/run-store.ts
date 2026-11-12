@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { executeFlow } from '../runtime/execute.ts';
-import type { ExecutionOptions } from '../runtime/execute.ts';
+import type { ExecutionOptions, StepOutcome } from '../runtime/execute.ts';
 import { classifyFailure, failureStep } from '../runtime/failure.ts';
 import type { RecordData } from '../flow/workflow.ts';
 
@@ -34,6 +34,17 @@ export class RunStore {
         records TEXT NOT NULL,
         PRIMARY KEY (run_id, step_id, page)
       );
+      CREATE TABLE IF NOT EXISTS run_steps (
+        run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+        seq INTEGER NOT NULL,
+        step_id TEXT NOT NULL,
+        op TEXT NOT NULL,
+        status TEXT NOT NULL,
+        rows INTEGER NOT NULL DEFAULT 0,
+        target TEXT,
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (run_id, seq)
+      );
     `);
     const columns = new Set(
       this.db
@@ -61,6 +72,31 @@ export class RunStore {
     this.db
       .prepare('INSERT INTO run_pages VALUES (?, ?, ?, ?)')
       .run(runId, stepId, page, JSON.stringify(records));
+  }
+
+  /** Records what one step produced, so the UI can show the real execution path. */
+  saveStep(runId: string, outcome: StepOutcome) {
+    this.db
+      .prepare(
+        `
+        INSERT INTO run_steps (run_id, seq, step_id, op, status, rows, target, duration_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (run_id, seq) DO UPDATE SET
+          status = excluded.status,
+          rows = excluded.rows,
+          duration_ms = excluded.duration_ms
+      `,
+      )
+      .run(
+        runId,
+        outcome.seq,
+        outcome.stepId,
+        outcome.op,
+        outcome.status,
+        outcome.rows,
+        outcome.target ?? null,
+        outcome.durationMs,
+      );
   }
 
   finish(
@@ -96,6 +132,9 @@ export class RunStore {
       this.db.exec(
         'DELETE FROM run_pages WHERE run_id IN (SELECT id FROM runs WHERE has_result = 0)',
       );
+      this.db.exec(
+        'DELETE FROM run_steps WHERE run_id IN (SELECT id FROM runs WHERE has_result = 0)',
+      );
       this.db.exec('COMMIT');
     } catch (error) {
       this.db.exec('ROLLBACK');
@@ -104,7 +143,7 @@ export class RunStore {
   }
 
   recentRuns() {
-    return this.db
+    const rows = this.db
       .prepare(
         `
       SELECT id, task_id, mode, status, started_at, finished_at,
@@ -112,7 +151,39 @@ export class RunStore {
       FROM runs ORDER BY sequence DESC LIMIT 30
     `,
       )
-      .all();
+      .all() as {
+      id: string;
+      task_id: string;
+      mode: string;
+      status: string;
+      started_at: string | null;
+      finished_at: string | null;
+      failure_code: string | null;
+      failure_message: string | null;
+      failed_step: string | null;
+    }[];
+    return rows.map((row) => ({ ...row }));
+  }
+
+  /** The steps that actually ran, in order, with what each of them produced. */
+  steps(runId: string) {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT seq, step_id, op, status, rows, target, duration_ms
+        FROM run_steps WHERE run_id = ? ORDER BY seq
+      `,
+      )
+      .all(runId) as {
+      seq: number;
+      step_id: string;
+      op: string;
+      status: string;
+      rows: number;
+      target: string | null;
+      duration_ms: number;
+    }[];
+    return rows.map((row) => ({ ...row }));
   }
 
   pages(runId: string, stepId: string): RecordData[] {
@@ -147,7 +218,7 @@ export async function runTask(
   taskId: string,
   manifest: unknown,
   workflow: unknown,
-  options: Omit<ExecutionOptions, 'savePage'>,
+  options: Omit<ExecutionOptions, 'savePage' | 'onStep'>,
 ) {
   const runId = store.start(taskId, options.mode);
   let result;
@@ -155,6 +226,7 @@ export async function runTask(
     result = await executeFlow(manifest, workflow, {
       ...options,
       savePage: (stepId, page, records) => store.savePage(runId, stepId, page, records),
+      onStep: (outcome) => store.saveStep(runId, outcome),
     });
   } catch (error) {
     store.finish(runId, 'incomplete', {

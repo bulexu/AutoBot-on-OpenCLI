@@ -1,3 +1,4 @@
+import { validMonth } from '../flow/workflow.ts';
 import { createBitableWriter } from '../integrations/bitable.ts';
 import { createFeishuRecords } from '../integrations/feishu-fields.ts';
 import { createCompetitorMonthlyRunner } from './competitor-monthly.ts';
@@ -5,6 +6,8 @@ import type { ExecutionOptions } from './execute.ts';
 
 export type ServiceBindings = {
   productFilter?: string;
+  month?: string;
+  inputs?: Record<string, unknown>;
   bitable?: { baseToken: string; targets: Record<string, string> };
 };
 
@@ -58,6 +61,15 @@ export function validateServiceBindings(value: unknown): ServiceBindings {
       throw new Error('Invalid product filter');
     }
     result.productFilter = value.productFilter;
+  }
+  if ('inputs' in value && value.inputs !== undefined) {
+    if (!value.inputs || typeof value.inputs !== 'object' || Array.isArray(value.inputs))
+      throw new Error('无效的流程参数');
+    result.inputs = value.inputs as Record<string, unknown>;
+  }
+  if ('month' in value && value.month !== undefined) {
+    if (!validMonth(value.month)) throw new Error('月份格式应为 YYYY-MM');
+    result.month = value.month;
   }
   if ('bitable' in value && value.bitable !== undefined) {
     const binding = value.bitable;

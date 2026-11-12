@@ -75,6 +75,33 @@ export function createProposer(config: ModelOptions): Propose {
   };
 }
 
+export type DesignTurn = { role: 'human' | 'assistant'; text: string };
+
+export function createDesignGuide(config: ModelOptions) {
+  const model = chatModel(config);
+  return async (turns: DesignTurn[], nextMaterial: string) => {
+    try {
+      const response = await model.invoke([
+        [
+          'system',
+          [
+            '你是 Autobot 的 API 流程设计助手。结合用户的目标回答问题，并引导收集同步资料。',
+            '用中文简短回答，自然地提示下一项所需资料。遇到问候时先回应问候。',
+            '不要要求用户发送密钥、Cookie 或密码。cURL 和脱敏 JSON 在客户端本机解析。',
+            '你还没有生成或试跑流程。以下是客户端确定的下一项资料：' + nextMaterial,
+          ].join('\n'),
+        ],
+        ...turns.map(({ role, text }): [DesignTurn['role'], string] => [role, text]),
+      ]);
+      const reply = response.text.trim();
+      if (!reply) throw new Error('模型返回空消息');
+      return reply;
+    } catch {
+      throw new Error('设计 Agent 未能回复，请检查系统设置中的模型配置和连接后重试');
+    }
+  };
+}
+
 const rpaSchema = z.object({
   reply: z.string(),
   steps: z.array(z.object({ action: z.string(), target: z.string(), expected: z.string() })),
