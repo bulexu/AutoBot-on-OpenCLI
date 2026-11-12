@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Taskdesk - Local Automation Engine</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration matching the Design System -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "tertiary": "#006243",
+            "on-tertiary": "#ffffff",
+            "on-surface": "#141b2b",
+            "on-primary": "#ffffff",
+            "surface-container-low": "#f1f3ff",
+            "surface-tint": "#0053db",
+            "error-container": "#ffdad6",
+            "surface-bright": "#f9f9ff",
+            "surface-container-lowest": "#ffffff",
+            "primary-fixed": "#dbe1ff",
+            "surface-container": "#e9edff",
+            "surface": "#f9f9ff",
+            "secondary-fixed-dim": "#bdc7d8",
+            "inverse-surface": "#293040",
+            "on-secondary-container": "#596372",
+            "on-error-container": "#93000a",
+            "secondary": "#555f6d",
+            "inverse-primary": "#b4c5ff",
+            "on-primary-fixed": "#00174b",
+            "primary": "#004ac6",
+            "primary-container": "#2563eb",
+            "surface-container-highest": "#dce2f7",
+            "inverse-on-surface": "#edf0ff",
+            "surface-container-high": "#e1e8fd",
+            "on-surface-variant": "#434655",
+            "tertiary-container": "#007d57",
+            "surface-dim": "#d3daef",
+            "on-background": "#141b2b",
+            "on-tertiary-container": "#bdffdc",
+            "on-tertiary-fixed": "#002114",
+            "on-primary-container": "#eeefff",
+            "outline-variant": "#c3c6d7",
+            "surface-variant": "#dce2f7",
+            "outline": "#737686",
+            "on-surface-variant": "#434655",
+            "secondary-fixed": "#d9e3f4",
+            "tertiary-fixed": "#85f8c4",
+            "primary-fixed-dim": "#b4c5ff",
+            "primary-fixed": "#dbe1ff",
+            "tertiary-fixed-dim": "#68dba9",
+            "background": "#f9f9ff",
+            "on-secondary-fixed": "#121c28",
+            "on-secondary-fixed-variant": "#3e4755"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-xs": "0.125rem",
+            "space-lg": "0.75rem",
+            "space-md": "0.5rem",
+            "margin": "0.75rem",
+            "space-sm": "0.25rem",
+            "space-xl": "1rem",
+            "gutter": "0.5rem"
+          },
+          "fontFamily": {
+            "body-lg": ["Inter"],
+            "label-lg": ["Inter"],
+            "body-sm": ["Inter"],
+            "label-md": ["Inter"],
+            "mono-code": ["JetBrains Mono"],
+            "body-md": ["Inter"],
+            "label-sm": ["Inter"],
+            "headline-lg": ["Inter"],
+            "headline-md": ["Inter"],
+            "mono-metric": ["JetBrains Mono"],
+            "headline-sm": ["Inter"]
+          },
+          "fontSize": {
+            "body-lg": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "label-lg": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+            "body-sm": ["11px", { "lineHeight": "15px", "fontWeight": "400" }],
+            "label-md": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "mono-code": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "body-md": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "label-sm": ["10px", { "lineHeight": "12px", "fontWeight": "600" }],
+            "headline-lg": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "headline-md": ["15px", { "lineHeight": "20px", "fontWeight": "600" }],
+            "mono-metric": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "headline-sm": ["13px", { "lineHeight": "18px", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 16px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Native desktop scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #c3c6d7;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #737686;
+    }
+
+    /* Subtle pulsing effect for running task */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.9); }
+    }
+    .animate-pulse-dot {
+      animation: pulse-dot 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface antialiased h-screen w-screen overflow-hidden flex items-center justify-center p-space-md select-none font-body-md">
+<!-- Desktop App Window Frame (1100x790 native logical container) -->
+<div class="w-[1100px] h-[790px] max-w-full max-h-full bg-surface-container-lowest border border-outline-variant/40 rounded-xl shadow-2xl flex flex-row overflow-hidden relative">
+<!-- ======================================================== -->
+<!-- 1. LEFT NAVIGATION SIDEBAR (Shared Component: SideNavBar) -->
+<!-- ======================================================== -->
+<aside class="w-[218px] flex-shrink-0 bg-surface-container-low border-r border-outline-variant/30 flex flex-col justify-between">
+<!-- Upper Section: Window Controls, Header & Navigation -->
+<div class="flex flex-col">
+<!-- Native macOS Traffic Light Controls (flush-left 38px toolbar zone) -->
+<div class="h-[38px] px-space-lg flex items-center gap-space-sm border-b border-transparent">
+<div class="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E] hover:opacity-80 cursor-pointer transition-opacity" title="关闭"></div>
+<div class="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123] hover:opacity-80 cursor-pointer transition-opacity" title="最小化"></div>
+<div class="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29] hover:opacity-80 cursor-pointer transition-opacity" title="缩放"></div>
+</div>
+<!-- Brand Title & Version -->
+<div class="px-space-lg py-space-md flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="text-headline-md font-headline-md font-semibold text-on-surface tracking-tight">Taskdesk</span>
+<span class="text-mono-metric font-mono-metric px-space-sm py-0.5 rounded bg-surface-container-high text-secondary text-[10px]">v1.4.2</span>
+</div>
+<span class="text-label-sm font-label-sm text-secondary">本地自动化引擎</span>
+</div>
+<!-- Primary Action CTA Button: 新建工作流 / 选择运行 -->
+<div class="px-space-md pb-space-sm pt-space-xs">
+<button class="w-full h-7 px-space-md bg-surface-container-lowest hover:bg-surface-container text-on-surface border border-outline-variant/50 rounded-lg flex items-center justify-between text-label-md font-label-md transition-colors active:scale-[0.99]">
+<span class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[15px]" data-icon="play_circle">play_circle</span>
+<span>选择工作流运行</span>
+</span>
+<span class="text-mono-metric font-mono-metric text-secondary text-[10px]">⌘O</span>
+</button>
+</div>
+<!-- Navigation Tab Items -->
+<nav class="px-space-sm py-space-sm flex flex-col gap-space-xs">
+<!-- Tab 1: 执行看板 (ACTIVE) -->
+<a class="flex items-center gap-space-md px-space-md py-space-sm bg-primary/10 text-primary rounded-lg font-medium border-l-2 border-primary active:scale-[0.99] transition-transform duration-100" href="#">
+<span class="material-symbols-outlined text-primary" data-icon="dashboard">dashboard</span>
+<span class="text-label-md font-label-md font-semibold">执行看板</span>
+</a>
+<!-- Tab 2: 工作流管理 (INACTIVE) -->
+<a class="flex items-center gap-space-md px-space-md py-space-sm text-secondary hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors duration-150 active:scale-[0.99]" href="#">
+<span class="material-symbols-outlined text-secondary" data-icon="account_tree">account_tree</span>
+<span class="text-label-md font-label-md">工作流管理</span>
+</a>
+<!-- Tab 3: 流程设计 (INACTIVE) -->
+<a class="flex items-center gap-space-md px-space-md py-space-sm text-secondary hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors duration-150 active:scale-[0.99]" href="#">
+<span class="material-symbols-outlined text-secondary" data-icon="schema">schema</span>
+<span class="text-label-md font-label-md">流程设计</span>
+</a>
+<!-- Tab 4: 系统设置 (INACTIVE) -->
+<a class="flex items-center gap-space-md px-space-md py-space-sm text-secondary hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors duration-150 active:scale-[0.99]" href="#">
+<span class="material-symbols-outlined text-secondary" data-icon="settings">settings</span>
+<span class="text-label-md font-label-md">系统设置</span>
+</a>
+</nav>
+</div>
+<!-- Sidebar Footer: Runtime status indicator -->
+<div class="p-space-md border-t border-outline-variant/30 flex flex-col gap-space-xs bg-surface-container-low/60">
+<div class="flex items-center justify-between text-label-sm font-label-sm">
+<div class="flex items-center gap-space-sm text-tertiary">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse-dot"></span>
+<span class="font-medium">已就绪</span>
+</div>
+<span class="material-symbols-outlined text-secondary text-[14px]" data-icon="dns">dns</span>
+</div>
+<div class="flex items-center justify-between text-mono-metric font-mono-metric text-secondary text-[10px] mt-0.5">
+<span>127.0.0.1:9410</span>
+<span>48.2 MB</span>
+</div>
+</div>
+</aside>
+<!-- ======================================================== -->
+<!-- 2. MAIN APPLICATION CONTENT AREA -->
+<!-- ======================================================== -->
+<main class="flex-1 flex flex-col h-full bg-surface-bright overflow-hidden">
+<!-- ======================================================== -->
+<!-- TOP NAV / WINDOW TOOLBAR (Shared Component: TopNavBar) -->
+<!-- ======================================================== -->
+<header class="h-[38px] px-space-lg flex items-center justify-between bg-surface-container-lowest border-b border-outline-variant/30 flex-shrink-0">
+<!-- Left: Window Title Breadcrumb & Scope Tag -->
+<div class="flex items-center gap-space-md">
+<h1 class="text-headline-sm font-headline-sm text-on-surface font-semibold tracking-tight">执行看板</h1>
+<span class="text-secondary text-[11px] font-body-sm hidden sm:inline">/</span>
+<span class="px-space-sm py-0.5 rounded text-[10px] font-label-sm bg-surface-container text-secondary flex items-center gap-space-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+<span>当前范围 · 正式执行</span>
+</span>
+</div>
+<!-- Center / Right: Range Pills & Control Buttons -->
+<div class="flex items-center gap-space-md">
+<!-- Date Range Segment Control -->
+<div class="bg-surface-container p-0.5 rounded flex items-center gap-space-xs">
+<button class="px-space-md py-0.5 text-label-sm font-label-sm font-medium bg-surface-container-lowest text-primary rounded shadow-xs">今天</button>
+<button class="px-space-md py-0.5 text-label-sm font-label-sm text-secondary hover:text-on-surface transition-colors">最近7天</button>
+<button class="px-space-md py-0.5 text-label-sm font-label-sm text-secondary hover:text-on-surface transition-colors">最近30天</button>
+</div>
+<div class="h-3.5 w-px bg-outline-variant/40"></div>
+<!-- Execution Mode Segment -->
+<div class="bg-surface-container p-0.5 rounded flex items-center gap-space-xs">
+<button class="px-space-md py-0.5 text-label-sm font-label-sm font-medium bg-surface-container-lowest text-on-surface rounded shadow-xs">正式执行</button>
+<button class="px-space-md py-0.5 text-label-sm font-label-sm text-secondary hover:text-on-surface transition-colors">只读预览</button>
+<button class="px-space-md py-0.5 text-label-sm font-label-sm text-secondary hover:text-on-surface transition-colors">全部</button>
+</div>
+<div class="h-3.5 w-px bg-outline-variant/40"></div>
+<!-- Trailing Toolbar Actions -->
+<div class="flex items-center gap-space-xs">
+<button class="w-6 h-6 rounded flex items-center justify-center text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" title="刷新数据 (⌘R)">
+<span class="material-symbols-outlined text-[15px]" data-icon="refresh">refresh</span>
+</button>
+<button class="w-6 h-6 rounded flex items-center justify-center text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" title="筛选设置">
+<span class="material-symbols-outlined text-[15px]" data-icon="tune">tune</span>
+</button>
+<button class="w-6 h-6 rounded flex items-center justify-center text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" title="使用帮助">
+<span class="material-symbols-outlined text-[15px]" data-icon="help">help</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Scrollable Main Canvas -->
+<div class="flex-1 overflow-y-auto p-space-lg flex flex-col gap-space-lg">
+<!-- ======================================================== -->
+<!-- 3. FOUR RESTRAINED METRIC TILES                          -->
+<!-- ======================================================== -->
+<section class="grid grid-cols-3 gap-space-md"><div class="bg-surface-container-lowest px-space-lg py-space-md border border-outline-variant/30 rounded-lg flex items-center justify-between"><div class="flex flex-col"><span class="text-label-sm font-label-sm text-secondary">今日执行</span><span class="text-mono-metric font-mono-metric text-[20px] font-semibold text-on-surface tracking-tight mt-0.5">24 <span class="text-body-sm font-normal text-secondary">次</span></span></div><div class="w-8 h-8 rounded-lg bg-surface-container-low flex items-center justify-center text-secondary"><span class="material-symbols-outlined text-[18px]" data-icon="terminal">terminal</span></div></div><div class="bg-surface-container-lowest px-space-lg py-space-md border border-outline-variant/30 rounded-lg flex items-center justify-between"><div class="flex flex-col"><span class="text-label-sm font-label-sm text-secondary">执行成功率</span><span class="text-mono-metric font-mono-metric text-[20px] font-semibold text-tertiary tracking-tight mt-0.5">91.3%</span></div><div class="w-8 h-8 rounded-lg bg-tertiary/10 flex items-center justify-center text-tertiary"><span class="material-symbols-outlined text-[18px]" data-icon="check_circle">check_circle</span></div></div><div class="bg-surface-container-lowest px-space-lg py-space-md border border-outline-variant/30 rounded-lg flex items-center justify-between"><div class="flex flex-col"><span class="text-label-sm font-label-sm text-secondary">运行中 / 异常</span><div class="flex items-center gap-space-md mt-0.5"><span class="text-mono-metric font-mono-metric text-[20px] font-semibold text-primary tracking-tight">1 <span class="text-label-sm font-normal text-secondary">进行</span></span><span class="text-outline-variant/60 text-[11px]">/</span><span class="text-mono-metric font-mono-metric text-[20px] font-semibold text-error tracking-tight">2 <span class="text-label-sm font-normal text-secondary">异常</span></span></div></div><div class="w-8 h-8 rounded-lg bg-error-container/40 flex items-center justify-center text-error"><span class="material-symbols-outlined text-[18px]" data-icon="warning">warning</span></div></div></section>
+<!-- ======================================================== -->
+<!-- 4. COMPACT ACTIVE-RUN STRIP                             -->
+<!-- ======================================================== -->
+<section class="bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-space-lg py-space-sm flex items-center justify-between"><div class="flex items-center gap-space-md min-w-0"><div class="flex items-center gap-space-xs text-primary text-label-sm font-semibold"><span class="w-2 h-2 rounded-full bg-primary animate-pulse-dot"></span><span>运行中</span></div><span class="text-outline-variant/60 text-[11px]">·</span><span class="text-body-md font-semibold text-on-surface">数据整理示例 <span class="text-mono-metric font-normal text-secondary text-[11px]">#084</span></span><span class="text-outline-variant/60 text-[11px]">·</span><span class="text-body-sm text-secondary font-mono-metric">已耗时 <span class="text-primary font-medium">1分12秒</span></span></div><div class="flex items-center gap-space-sm flex-shrink-0"><button class="h-6 px-space-md bg-surface-container-low hover:bg-surface-container text-on-surface rounded text-label-sm font-label-sm flex items-center gap-space-xs transition-colors"><span class="material-symbols-outlined text-[14px] text-primary" data-icon="subject">subject</span><span>实时日志</span></button></div></section>
+<!-- ======================================================== -->
+<!-- 5. EXECUTION RECORDS TABLE AREA                          -->
+<!-- ======================================================== -->
+<section class="bg-surface-container-lowest border border-outline-variant/30 rounded-lg flex-1 flex flex-col min-h-0 overflow-hidden">
+<!-- Table Toolbar & Filters Bar -->
+<div class="px-space-md py-space-sm border-b border-outline-variant/20 flex items-center justify-between gap-space-md bg-surface-container-lowest">
+<!-- Left: Filter Dropdowns -->
+<div class="flex items-center gap-space-sm">
+<div class="relative">
+<select class="h-7 pl-space-md pr-space-xl bg-surface-container-lowest border border-outline-variant/50 rounded text-label-sm font-label-sm text-on-surface focus:outline-none focus:border-primary appearance-none cursor-pointer py-0">
+<option>全部工作流</option>
+<option>数据整理示例</option>
+<option>文件归档示例</option>
+<option>报表生成示例</option>
+</select>
+<span class="material-symbols-outlined text-secondary absolute right-1.5 top-1.5 pointer-events-none text-[14px]" data-icon="expand_more">expand_more</span>
+</div>
+<div class="relative">
+<select class="h-7 pl-space-md pr-space-xl bg-surface-container-lowest border border-outline-variant/50 rounded text-label-sm font-label-sm text-on-surface focus:outline-none focus:border-primary appearance-none cursor-pointer py-0">
+<option>全部状态</option>
+<option>成功</option>
+<option>未完成</option>
+<option>运行中</option>
+</select>
+<span class="material-symbols-outlined text-secondary absolute right-1.5 top-1.5 pointer-events-none text-[14px]" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+<!-- Right: Search Input -->
+<div class="relative w-64">
+<span class="material-symbols-outlined text-secondary absolute left-2 top-1.5 pointer-events-none text-[14px]" data-icon="search">search</span>
+<input class="w-full h-7 pl-7 pr-space-md bg-surface-container-lowest border border-outline-variant/50 rounded text-body-sm font-body-sm placeholder:text-secondary focus:outline-none focus:border-primary py-0" placeholder="搜索执行ID或工作流..." type="text"/>
+</div>
+</div>
+<!-- Execution Records Data Table -->
+<div class="flex-1 overflow-y-auto"><table class="w-full text-left border-collapse"><thead><tr class="h-8 border-b border-outline-variant/20 bg-surface-container-low/40 text-secondary text-label-sm font-label-sm sticky top-0"><th class="px-space-lg font-medium">工作流</th><th class="px-space-md font-medium">状态</th><th class="px-space-md font-medium">开始时间</th><th class="px-space-md font-medium">耗时</th><th class="px-space-lg font-medium text-right">操作</th></tr></thead><tbody class="divide-y divide-outline-variant/15 text-body-md font-body-md"><tr class="h-[42px] hover:bg-surface-container/30 transition-colors bg-primary/5"><td class="px-space-lg font-medium text-on-surface"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-primary text-[16px]" data-icon="sync">sync</span><span class="font-semibold text-on-surface">数据整理示例</span><span class="text-mono-metric font-mono-metric text-secondary text-[11px]">#084</span></div></td><td class="px-space-md"><div class="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded text-[11px] font-label-md bg-primary/10 text-primary font-medium"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-dot"></span><span>运行中</span></div></td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">14:28:10</td><td class="px-space-md text-mono-metric font-mono-metric text-primary font-medium text-[11px]">1分12秒</td><td class="px-space-lg text-right"><button class="h-6 px-space-sm rounded inline-flex items-center gap-space-xs text-secondary hover:text-primary hover:bg-surface-container text-label-sm font-label-sm transition-colors"><span class="material-symbols-outlined text-[14px]" data-icon="visibility">visibility</span><span>详情</span></button></td></tr><tr class="h-[42px] hover:bg-surface-container/30 transition-colors"><td class="px-space-lg font-medium text-on-surface"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-secondary text-[16px]" data-icon="folder_zip">folder_zip</span><span class="font-medium text-on-surface">文件归档示例</span><span class="text-mono-metric font-mono-metric text-secondary text-[11px]">#083</span></div></td><td class="px-space-md"><div class="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded text-[11px] font-label-md bg-tertiary/10 text-tertiary font-medium"><span class="material-symbols-outlined text-[13px]" data-icon="check_circle">check_circle</span><span>成功</span></div></td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">13:45:02</td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">38秒</td><td class="px-space-lg text-right"><button class="h-6 px-space-sm rounded inline-flex items-center gap-space-xs text-secondary hover:text-on-surface hover:bg-surface-container text-label-sm font-label-sm transition-colors"><span class="material-symbols-outlined text-[14px]" data-icon="visibility">visibility</span><span>详情</span></button></td></tr><tr class="h-[42px] hover:bg-surface-container/30 transition-colors"><td class="px-space-lg font-medium text-on-surface"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-secondary text-[16px]" data-icon="monitoring">monitoring</span><span class="font-medium text-on-surface">报表生成示例</span><span class="text-mono-metric font-mono-metric text-secondary text-[11px]">#082</span></div></td><td class="px-space-md"><div class="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded text-[11px] font-label-md bg-tertiary/10 text-tertiary font-medium"><span class="material-symbols-outlined text-[13px]" data-icon="check_circle">check_circle</span><span>成功</span></div></td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">11:20:19</td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">1分05秒</td><td class="px-space-lg text-right"><button class="h-6 px-space-sm rounded inline-flex items-center gap-space-xs text-secondary hover:text-on-surface hover:bg-surface-container text-label-sm font-label-sm transition-colors"><span class="material-symbols-outlined text-[14px]" data-icon="visibility">visibility</span><span>详情</span></button></td></tr><tr class="h-[42px] hover:bg-surface-container/30 transition-colors"><td class="px-space-lg font-medium text-on-surface"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-error text-[16px]" data-icon="sync_problem">sync_problem</span><span class="font-medium text-on-surface">数据整理示例</span><span class="text-mono-metric font-mono-metric text-secondary text-[11px]">#081</span></div></td><td class="px-space-md"><div class="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded text-[11px] font-label-md bg-error-container/40 text-error font-medium"><span class="material-symbols-outlined text-[13px]" data-icon="cancel">cancel</span><span>未完成</span></div></td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">10:02:44</td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">14秒</td><td class="px-space-lg text-right"><button class="h-6 px-space-sm rounded inline-flex items-center gap-space-xs text-error hover:bg-error-container/40 text-label-sm font-label-sm transition-colors" title="ERR_SQLITE_BUSY"><span class="material-symbols-outlined text-[14px]" data-icon="error">error</span><span>原因</span></button></td></tr><tr class="h-[42px] hover:bg-surface-container/30 transition-colors"><td class="px-space-lg font-medium text-on-surface"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-secondary text-[16px]" data-icon="folder_zip">folder_zip</span><span class="font-medium text-on-surface">文件归档示例</span><span class="text-mono-metric font-mono-metric text-secondary text-[11px]">#080</span></div></td><td class="px-space-md"><div class="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded text-[11px] font-label-md bg-tertiary/10 text-tertiary font-medium"><span class="material-symbols-outlined text-[13px]" data-icon="check_circle">check_circle</span><span>成功</span></div></td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">09:15:33</td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">41秒</td><td class="px-space-lg text-right"><button class="h-6 px-space-sm rounded inline-flex items-center gap-space-xs text-secondary hover:text-on-surface hover:bg-surface-container text-label-sm font-label-sm transition-colors"><span class="material-symbols-outlined text-[14px]" data-icon="visibility">visibility</span><span>详情</span></button></td></tr><tr class="h-[42px] hover:bg-surface-container/30 transition-colors"><td class="px-space-lg font-medium text-on-surface"><div class="flex items-center gap-space-sm"><span class="material-symbols-outlined text-secondary text-[16px]" data-icon="monitoring">monitoring</span><span class="font-medium text-on-surface">报表生成示例</span><span class="text-mono-metric font-mono-metric text-secondary text-[11px]">#079</span></div></td><td class="px-space-md"><div class="inline-flex items-center gap-space-xs px-space-sm py-0.5 rounded text-[11px] font-label-md bg-tertiary/10 text-tertiary font-medium"><span class="material-symbols-outlined text-[13px]" data-icon="check_circle">check_circle</span><span>成功</span></div></td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">昨天 17:30:11</td><td class="px-space-md text-mono-metric font-mono-metric text-secondary text-[11px]">52秒</td><td class="px-space-lg text-right"><button class="h-6 px-space-sm rounded inline-flex items-center gap-space-xs text-secondary hover:text-on-surface hover:bg-surface-container text-label-sm font-label-sm transition-colors"><span class="material-symbols-outlined text-[14px]" data-icon="visibility">visibility</span><span>详情</span></button></td></tr></tbody></table></div>
+<!-- Table Footer: Status Count & Actions -->
+<div class="h-8 px-space-md border-t border-outline-variant/20 bg-surface-container-low/30 flex items-center justify-between text-body-sm font-body-sm text-secondary flex-shrink-0">
+<div class="flex items-center gap-space-md">
+<span class="text-mono-metric font-mono-metric text-[11px]">共 24 次执行 · 最近30条记录</span>
+</div>
+<div class="flex items-center gap-space-sm">
+<button class="h-6 px-space-sm rounded text-label-sm font-label-sm hover:bg-surface-container text-secondary hover:text-on-surface flex items-center gap-space-xs transition-colors" title="导出执行明细至 CSV">
+<span class="material-symbols-outlined text-[13px]" data-icon="download">download</span>
+<span>导出明细</span>
+</button>
+<div class="h-3 w-px bg-outline-variant/30"></div>
+<div class="flex items-center gap-0.5">
+<button class="w-5 h-5 rounded flex items-center justify-center text-secondary hover:bg-surface-container disabled:opacity-40" disabled="">
+<span class="material-symbols-outlined text-[13px]" data-icon="chevron_left">chevron_left</span>
+</button>
+<span class="px-1 text-mono-metric font-mono-metric text-[10px]">1 / 1</span>
+<button class="w-5 h-5 rounded flex items-center justify-center text-secondary hover:bg-surface-container disabled:opacity-40" disabled="">
+<span class="material-symbols-outlined text-[13px]" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+</div>
+</body></html>

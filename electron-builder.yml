@@ -1,0 +1,13 @@
+appId: com.autobot.workbench
+productName: Autobot
+asar: false
+directories:
+  output: dist
+files:
+  - src/**/*
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64

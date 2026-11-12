@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Autobot 执行详情 - 未完成与失败异常</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration matching the Design System -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "tertiary": "#006243",
+            "on-tertiary": "#ffffff",
+            "on-surface": "#141b2b",
+            "on-primary": "#ffffff",
+            "surface-container-low": "#f1f3ff",
+            "surface-tint": "#0053db",
+            "error-container": "#ffdad6",
+            "surface-bright": "#f9f9ff",
+            "surface-container-lowest": "#ffffff",
+            "primary-fixed": "#dbe1ff",
+            "surface-container": "#e9edff",
+            "surface": "#f9f9ff",
+            "secondary-fixed-dim": "#bdc7d8",
+            "inverse-surface": "#293040",
+            "on-secondary-container": "#596372",
+            "on-error-container": "#93000a",
+            "secondary": "#555f6d",
+            "inverse-primary": "#b4c5ff",
+            "on-primary-fixed": "#00174b",
+            "primary": "#004ac6",
+            "primary-container": "#2563eb",
+            "surface-container-highest": "#dce2f7",
+            "inverse-on-surface": "#edf0ff",
+            "surface-container-high": "#e1e8fd",
+            "on-secondary": "#ffffff",
+            "on-error": "#ffffff",
+            "secondary-container": "#d6e0f1",
+            "error": "#ba1a1a",
+            "on-primary-fixed-variant": "#003ea8",
+            "on-tertiary-fixed": "#002114",
+            "on-primary-container": "#eeefff",
+            "outline-variant": "#c3c6d7",
+            "tertiary-container": "#007d57",
+            "surface-dim": "#d3daef",
+            "on-background": "#141b2b",
+            "on-tertiary-container": "#bdffdc",
+            "on-tertiary-fixed-variant": "#005137",
+            "surface-variant": "#dce2f7",
+            "outline": "#737686",
+            "on-surface-variant": "#434655",
+            "secondary-fixed": "#d9e3f4",
+            "tertiary-fixed": "#85f8c4",
+            "primary-fixed-dim": "#b4c5ff",
+            "tertiary-fixed-dim": "#68dba9",
+            "background": "#f9f9ff",
+            "on-secondary-fixed": "#121c28",
+            "on-secondary-fixed-variant": "#3e4755"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-xs": "0.125rem",
+            "space-lg": "0.75rem",
+            "space-md": "0.5rem",
+            "margin": "0.75rem",
+            "space-sm": "0.25rem",
+            "space-xl": "1rem",
+            "gutter": "0.5rem"
+          },
+          "fontFamily": {
+            "body-lg": ["Inter"],
+            "label-lg": ["Inter"],
+            "body-sm": ["Inter"],
+            "label-md": ["Inter"],
+            "mono-code": ["JetBrains Mono"],
+            "body-md": ["Inter"],
+            "label-sm": ["Inter"],
+            "headline-lg": ["Inter"],
+            "headline-md": ["Inter"],
+            "mono-metric": ["JetBrains Mono"],
+            "headline-sm": ["Inter"]
+          },
+          "fontSize": {
+            "body-lg": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "label-lg": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+            "body-sm": ["11px", { "lineHeight": "15px", "fontWeight": "400" }],
+            "label-md": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "mono-code": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "body-md": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "label-sm": ["10px", { "lineHeight": "12px", "fontWeight": "600" }],
+            "headline-lg": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "headline-md": ["15px", { "lineHeight": "20px", "fontWeight": "600" }],
+            "mono-metric": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "headline-sm": ["13px", { "lineHeight": "18px", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 16px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Native desktop scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #c3c6d7;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #737686;
+    }
+
+    /* Subtle pulsing effect for running task */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.9); }
+    }
+    .animate-pulse-dot {
+      animation: pulse-dot 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+<meta content="web_dashboard" name="shell-type"/></head>
+<body class="bg-surface text-on-surface antialiased h-screen w-screen overflow-hidden flex items-center justify-center p-space-md select-none font-body-md">
+<!-- Desktop App Window Frame (1100x790 native logical container) -->
+<div class="w-[1100px] h-[790px] max-w-full max-h-full bg-surface-container-lowest border border-outline-variant/40 rounded-xl shadow-2xl flex flex-row overflow-hidden relative">
+<!-- ======================================================== -->
+<!-- 1. LEFT NAVIGATION SIDEBAR (Shared Component: SideNavBar) -->
+<!-- ======================================================== -->
+<aside class="w-[218px] flex-shrink-0 bg-surface-container-low border-r border-outline-variant/30 flex flex-col justify-between">
+<!-- Upper Section: Window Controls, Header & Navigation -->
+<div class="flex flex-col">
+<!-- Native macOS Traffic Light Controls (flush-left 38px toolbar zone) -->
+<div class="h-[38px] px-space-lg flex items-center gap-space-sm border-b border-transparent">
+<div class="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E] hover:opacity-80 cursor-pointer transition-opacity" title="关闭"></div>
+<div class="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123] hover:opacity-80 cursor-pointer transition-opacity" title="最小化"></div>
+<div class="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29] hover:opacity-80 cursor-pointer transition-opacity" title="缩放"></div>
+</div>
+<!-- Brand Title & Version -->
+<div class="px-space-lg py-space-md flex flex-col gap-space-xs">
+<div class="flex items-center justify-between">
+<span class="text-headline-md font-headline-md font-semibold text-on-surface tracking-tight">Taskdesk</span>
+<span class="text-mono-metric font-mono-metric px-space-sm py-0.5 rounded bg-surface-container-high text-secondary text-[10px]">v1.4.2</span>
+</div>
+<span class="text-label-sm font-label-sm text-secondary">本地自动化引擎</span>
+</div>
+<!-- Primary Action CTA Button: 新建工作流 / 选择运行 -->
+<div class="px-space-md pb-space-sm pt-space-xs">
+<button class="w-full h-7 px-space-md bg-surface-container-lowest hover:bg-surface-container text-on-surface border border-outline-variant/50 rounded-lg flex items-center justify-between text-label-md font-label-md transition-colors active:scale-[0.99]">
+<span class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[15px]" data-icon="play_circle">play_circle</span>
+<span>选择工作流运行</span>
+</span>
+<span class="text-mono-metric font-mono-metric text-secondary text-[10px]">⌘O</span>
+</button>
+</div>
+<!-- Navigation Tab Items -->
+<nav class="px-space-sm py-space-sm flex flex-col gap-space-xs">
+<!-- Tab 1: 执行看板 (ACTIVE) -->
+<a class="flex items-center gap-space-md px-space-md py-space-sm bg-primary/10 text-primary rounded-lg font-medium border-l-2 border-primary active:scale-[0.99] transition-transform duration-100" href="#">
+<span class="material-symbols-outlined text-primary" data-icon="dashboard">dashboard</span>
+<span class="text-label-md font-label-md font-semibold">执行看板</span>
+</a>
+<!-- Tab 2: 工作流管理 (INACTIVE) -->
+<a class="flex items-center gap-space-md px-space-md py-space-sm text-secondary hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors duration-150 active:scale-[0.99]" href="#">
+<span class="material-symbols-outlined text-secondary" data-icon="account_tree">account_tree</span>
+<span class="text-label-md font-label-md">工作流管理</span>
+</a>
+<!-- Tab 3: 流程设计 (INACTIVE) -->
+<a class="flex items-center gap-space-md px-space-md py-space-sm text-secondary hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors duration-150 active:scale-[0.99]" href="#">
+<span class="material-symbols-outlined text-secondary" data-icon="schema">schema</span>
+<span class="text-label-md font-label-md">流程设计</span>
+</a>
+<!-- Tab 4: 系统设置 (INACTIVE) -->
+<a class="flex items-center gap-space-md px-space-md py-space-sm text-secondary hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors duration-150 active:scale-[0.99]" href="#">
+<span class="material-symbols-outlined text-secondary" data-icon="settings">settings</span>
+<span class="text-label-md font-label-md">系统设置</span>
+</a>
+</nav>
+</div>
+<!-- Sidebar Footer: Runtime status indicator -->
+<div class="p-space-md border-t border-outline-variant/30 flex flex-col gap-space-xs bg-surface-container-low/60">
+<div class="flex items-center justify-between text-label-sm font-label-sm">
+<div class="flex items-center gap-space-sm text-tertiary">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse-dot"></span>
+<span class="font-medium">已就绪</span>
+</div>
+<span class="material-symbols-outlined text-secondary text-[14px]" data-icon="dns">dns</span>
+</div>
+<div class="flex items-center justify-between text-mono-metric font-mono-metric text-secondary text-[10px] mt-0.5">
+<span>127.0.0.1:9410</span>
+<span>48.2 MB</span>
+</div>
+</div>
+</aside>
+<!-- ======================================================== -->
+<!-- 2. MAIN APPLICATION CONTENT AREA -->
+<!-- ======================================================== -->
+<main class="flex-1 flex flex-col h-full bg-surface-bright overflow-hidden"><div class="flex flex-col w-full h-full relative overflow-hidden bg-surface">
+<!-- 1. TOP SUB-HEADER & FILTER TOOLBAR (Within Main View) -->
+<header class="h-[46px] flex-shrink-0 bg-surface-container-lowest flex items-center justify-between px-space-lg shadow-sm z-10">
+<div class="flex items-center gap-space-md min-w-0">
+<div class="flex items-center gap-space-xs text-secondary font-label-md text-label-md">
+<span>执行看板</span>
+<span class="material-symbols-outlined text-[13px] text-outline">chevron_right</span>
+<span class="text-on-surface font-semibold truncate">运行记录分析</span>
+</div>
+<div class="h-3 w-[1px] bg-outline-variant"></div>
+<div class="flex items-center gap-space-xs bg-surface-container px-space-sm py-0.5 rounded-lg">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-dot"></span>
+<span class="text-label-sm font-label-sm text-on-surface-variant font-mono-metric">QUEUE: 3 RUNNING / 24 COMPLETED</span>
+</div>
+</div>
+<!-- Actions & Filter segment -->
+<div class="flex items-center gap-space-sm">
+<div class="flex items-center bg-surface-container-low rounded-lg p-0.5 shadow-inner">
+<button class="px-space-md py-1 rounded bg-surface-container-lowest text-on-surface font-label-sm text-label-sm shadow-sm transition-all">全部记录</button>
+<button class="px-space-md py-1 rounded text-secondary hover:text-on-surface font-label-sm text-label-sm transition-all">仅看异常</button>
+<button class="px-space-md py-1 rounded text-secondary hover:text-on-surface font-label-sm text-label-sm transition-all">生产入库</button>
+</div>
+<div class="h-3.5 w-[1px] bg-outline-variant mx-1"></div>
+<button class="h-7 px-space-md bg-surface-container text-on-surface hover:bg-surface-container-high rounded-lg flex items-center gap-space-xs font-label-md text-label-md transition-colors">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+<span>过滤筛选</span>
+</button>
+<button class="h-7 px-space-md bg-primary text-on-primary rounded-lg flex items-center gap-space-xs font-label-md text-label-md shadow-sm hover:opacity-90 active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined text-[14px]">refresh</span>
+<span>同步状态</span>
+</button>
+</div>
+</header>
+<!-- 2. UNDERLYING WORKSPACE CANVAS (Data Table & Grid Backdrop) -->
+<div class="flex-1 flex overflow-hidden relative">
+<div class="flex-1 flex flex-col overflow-y-auto p-space-lg space-y-space-md bg-surface">
+<!-- Active Execution Highlights -->
+<div class="grid grid-cols-3 gap-space-md">
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-label-sm font-label-sm text-secondary">今日吞吐总量</span>
+<span class="text-headline-md font-headline-md text-on-surface font-mono-metric font-bold mt-0.5">84,920 <span class="text-label-sm font-normal text-secondary">行</span></span>
+</div>
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">query_stats</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-label-sm font-label-sm text-secondary">任务成功率</span>
+<span class="text-headline-md font-headline-md text-tertiary font-mono-metric font-bold mt-0.5">99.4%</span>
+</div>
+<div class="w-8 h-8 rounded-lg bg-tertiary-container/20 flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-[18px]">verified</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-sm flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-label-sm font-label-sm text-secondary">平均处理延迟</span>
+<span class="text-headline-md font-headline-md text-on-surface font-mono-metric font-bold mt-0.5">1m 18s</span>
+</div>
+<div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[18px]">speed</span>
+</div>
+</div>
+</div>
+<!-- Execution Queue Table -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden flex flex-col">
+<div class="px-space-md py-space-sm bg-surface-container-low flex items-center justify-between font-label-sm text-label-sm text-secondary">
+<div class="flex items-center gap-space-lg w-full"><span class="w-20">执行编号</span><span class="flex-1">工作流目标</span><span class="w-24">模式</span><span class="w-28">当前状态</span><span class="w-28">开始时间</span><span class="w-20 text-right">耗时</span></div>
+</div>
+<div class="divide-y divide-surface-container"><div class="px-space-md py-space-sm flex items-center gap-space-lg text-body-sm font-body-sm hover:bg-surface-container-low transition-colors bg-primary/5"><span class="w-20 font-mono-metric text-primary font-medium flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-dot"></span>#084</span><div class="flex-1 flex items-center gap-space-sm min-w-0"><span class="material-symbols-outlined text-primary text-[15px] animate-spin flex-shrink-0">sync</span><span class="font-medium text-on-surface truncate">数据整理示例 (多流聚合)</span><span class="text-label-sm font-label-sm px-1.5 py-0.5 rounded bg-surface-container text-secondary font-mono-metric flex-shrink-0">ID: 84292</span></div><span class="w-24 text-secondary flex-shrink-0">正式写入</span><div class="w-28 flex items-center gap-1.5 text-primary flex-shrink-0"><span class="w-2 h-2 rounded-full bg-primary animate-pulse-dot"></span><span class="font-medium">处理中 74%</span></div><span class="w-28 font-mono-metric text-secondary flex-shrink-0">14:31:02</span><span class="w-20 font-mono-metric text-secondary flex-shrink-0 text-right">00:48</span></div><div class="px-space-md py-space-sm flex items-center gap-space-lg text-body-sm font-body-sm hover:bg-surface-container-low transition-colors cursor-pointer"><span class="w-20 font-mono-metric text-secondary">#083</span><div class="flex-1 flex items-center gap-space-sm min-w-0"><span class="material-symbols-outlined text-tertiary text-[15px] flex-shrink-0">check_circle</span><span class="text-on-surface truncate">数据整理示例</span><span class="text-label-sm font-label-sm px-1.5 py-0.5 rounded bg-surface-container text-secondary font-mono-metric flex-shrink-0">exec_20250520_84291</span></div><span class="w-24 text-secondary flex-shrink-0">正式执行</span><div class="w-28 flex items-center gap-1.5 text-tertiary flex-shrink-0"><span class="w-2 h-2 rounded-full bg-tertiary"></span><span>执行完成</span></div><span class="w-28 font-mono-metric text-secondary flex-shrink-0">14:28:10</span><span class="w-20 font-mono-metric text-secondary flex-shrink-0 text-right">01:12</span></div><div class="px-space-md py-space-sm flex items-center gap-space-lg text-body-sm font-body-sm hover:bg-surface-container-low transition-colors cursor-pointer"><span class="w-20 font-mono-metric text-secondary">#082</span><div class="flex-1 flex items-center gap-space-sm min-w-0"><span class="material-symbols-outlined text-tertiary text-[15px] flex-shrink-0">check_circle</span><span class="text-on-surface truncate">CRM 增量同步与清洗</span><span class="text-label-sm font-label-sm px-1.5 py-0.5 rounded bg-surface-container text-secondary font-mono-metric flex-shrink-0">exec_20250520_84102</span></div><span class="w-24 text-secondary flex-shrink-0">只读测试</span><div class="w-28 flex items-center gap-1.5 text-tertiary flex-shrink-0"><span class="w-2 h-2 rounded-full bg-tertiary"></span><span>执行完成</span></div><span class="w-28 font-mono-metric text-secondary flex-shrink-0">14:15:00</span><span class="w-20 font-mono-metric text-secondary flex-shrink-0 text-right">00:34</span></div><div class="px-space-md py-space-sm flex items-center gap-space-lg text-body-sm font-body-sm bg-error-container/40 border-l-2 border-error transition-colors cursor-pointer"><span class="w-20 font-mono-metric text-error font-semibold flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-error"></span>#081</span><div class="flex-1 flex items-center gap-space-sm min-w-0"><span class="material-symbols-outlined text-error text-[15px] flex-shrink-0">error</span><span class="font-semibold text-on-surface truncate">财务发票汇总生成</span><span class="text-label-sm font-label-sm px-1.5 py-0.5 rounded bg-error-container/60 text-error font-mono-metric flex-shrink-0">exec_20250520_83988</span><span class="text-[10px] px-1 py-0.5 rounded bg-error/10 text-error font-medium flex-shrink-0">当前选中</span></div><span class="w-24 text-secondary flex-shrink-0">正式执行</span><div class="w-28 flex items-center gap-1.5 text-error font-semibold flex-shrink-0"><span class="w-2 h-2 rounded-full bg-error"></span><span>未完成 (连接超时)</span></div><span class="w-28 font-mono-metric text-secondary flex-shrink-0">13:50:21</span><span class="w-20 font-mono-metric text-error font-medium flex-shrink-0 text-right">01:12</span></div></div>
+</div>
+</div>
+<!-- 3. SLIDE-OUT EXECUTION DETAIL DRAWER (Desktop Native Precision Pane, 460px) -->
+<div class="absolute inset-0 bg-inverse-surface/10 z-20 transition-opacity backdrop-blur-[0.5px]" id="drawerBackdrop" onclick="document.getElementById('closeDrawerBtn')?.click()"></div><aside class="absolute top-0 right-0 h-full w-[470px] bg-surface-container-lowest shadow-2xl border-l border-outline-variant/40 flex flex-col z-30 transition-all duration-200 ease-out" id="detailDrawer"><!-- Drawer Top Bar & Metadata -->
+<div class="p-space-lg bg-surface-container-low/70 flex flex-col gap-space-sm border-b border-outline-variant/30">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm min-w-0">
+<span class="material-symbols-outlined text-error text-[20px]" style="font-variation-settings: 'FILL' 1;">error</span>
+<h2 class="text-headline-md font-headline-md font-bold text-on-surface truncate">财务发票汇总生成</h2>
+</div>
+<button class="w-6 h-6 rounded flex items-center justify-center text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" id="closeDrawerBtn" title="关闭详情面板">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+<!-- ID, Execution Mode, Status Pill -->
+<div class="flex items-center justify-between mt-1">
+<div class="flex items-center gap-space-sm">
+<div class="flex items-center gap-1 px-space-sm py-0.5 bg-surface-container rounded font-mono-metric text-mono-metric text-secondary">
+<span>exec_20250520_83988</span>
+<button class="hover:text-primary transition-colors flex items-center" onclick="navigator.clipboard?.writeText('exec_20250520_83988')" title="复制 ID">
+<span class="material-symbols-outlined text-[12px]">content_copy</span>
+</button>
+</div>
+<span class="px-space-sm py-0.5 rounded bg-primary/10 text-primary font-label-sm text-label-sm font-semibold">
+              正式执行
+            </span>
+</div>
+<!-- Status badge -->
+<div class="flex items-center gap-1 px-2 py-0.5 rounded bg-error-container text-error border border-error/20 font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[13px]">cancel</span>
+<span>● 未完成 (执行中断 / 写入失败)</span>
+</div>
+</div>
+</div>
+<!-- Drawer Scrollable Body -->
+<div class="flex-1 overflow-y-auto p-space-lg space-y-space-lg">
+<!-- 3.1 Core Metrics Bar -->
+<div class="grid grid-cols-3 gap-space-xs bg-surface-container-low p-space-sm rounded-xl border border-outline-variant/30">
+<div class="flex flex-col bg-surface-container-lowest p-space-sm rounded-lg shadow-sm">
+<span class="text-label-sm font-label-sm text-secondary">开始时间</span>
+<span class="text-mono-metric font-mono-metric font-semibold text-on-surface text-[12px] mt-0.5">13:50:21</span>
+</div>
+<div class="flex flex-col bg-surface-container-lowest p-space-sm rounded-lg shadow-sm">
+<span class="text-label-sm font-label-sm text-secondary">中断 / 结束</span>
+<span class="text-mono-metric font-mono-metric font-semibold text-error text-[12px] mt-0.5">13:51:33</span>
+</div>
+<div class="flex flex-col bg-surface-container-lowest p-space-sm rounded-lg shadow-sm">
+<span class="text-label-sm font-label-sm text-secondary">耗时状态</span>
+<span class="text-mono-metric font-mono-metric font-bold text-error text-[12px] mt-0.5">1分12秒 (异常终止)</span>
+</div>
+</div>
+<!-- 3.2 Failure Diagnosis Card -->
+<div class="space-y-space-sm">
+<div class="flex items-center justify-between">
+<span class="text-label-sm font-label-sm uppercase tracking-wider text-secondary font-semibold">未完成诊断分析</span>
+<span class="text-label-sm font-label-sm text-error flex items-center gap-0.5 font-medium">
+<span class="material-symbols-outlined text-[13px]">warning</span>
+              阶段事务提交中断
+            </span>
+</div>
+<!-- Alert Box -->
+<div class="bg-error-container/30 border border-error/30 rounded-xl p-space-md space-y-space-md">
+<div class="flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-error text-[18px] mt-0.5 flex-shrink-0">report_problem</span>
+<div class="flex-1 space-y-1 min-w-0">
+<div class="text-body-sm font-bold text-error">
+                步骤 3/3 [生产表事务提交 (BatchInsert)] 失败
+              </div>
+<div class="font-mono-code text-[11px] bg-surface-container-lowest text-error p-space-sm rounded border border-error/20 leading-relaxed break-all select-text">
+                ConnectionTimeoutError: Target DB host 10.0.12.8:5432 unreachable after 3 retries (ETIMEDOUT)
+              </div>
+</div>
+</div>
+<!-- Impact analysis -->
+<div class="bg-surface-container-lowest/80 p-space-sm rounded-lg border border-outline-variant/30 text-body-sm space-y-1">
+<div class="text-label-sm font-semibold text-on-surface flex items-center gap-1">
+<span class="material-symbols-outlined text-primary text-[13px]">info</span>
+<span>数据状态说明</span>
+</div>
+<p class="text-on-surface-variant text-[11px] leading-snug">
+                上游读取 <span class="font-mono-metric font-bold text-primary">1,280</span> 条已暂存内存，但目标数据库未提交任何数据，无脏数据残留。
+              </p>
+</div>
+<!-- Guideline entrance button -->
+<div class="flex items-center justify-between pt-0.5">
+<span class="text-[11px] text-secondary">网络阻断或凭证已过期</span>
+<button class="text-[11px] px-2 py-1 rounded bg-surface-container-lowest hover:bg-surface-container text-primary font-medium flex items-center gap-1 border border-outline-variant/40 transition-colors">
+<span class="material-symbols-outlined text-[13px]">settings_ethernet</span>
+<span>前往检查凭证与网络配置</span>
+</button>
+</div>
+</div>
+</div>
+<!-- 3.3 Visual Execution Pipeline Map -->
+<div class="space-y-space-xs">
+<span class="text-label-sm font-label-sm uppercase tracking-wider text-secondary font-semibold">管道执行路径</span>
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm border border-outline-variant/20">
+<!-- Node 1: Completed -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="w-5 h-5 rounded-full bg-tertiary text-on-tertiary flex items-center justify-center text-[11px] font-mono-metric">1</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md text-on-surface">源数据读取 (Postgres_Source)</span>
+<span class="text-[10px] text-tertiary font-mono-metric">已完成 · 读取 1,280 条</span>
+</div>
+</div>
+<span class="font-mono-metric text-mono-metric text-secondary">240ms</span>
+</div>
+<div class="ml-2.5 h-3 w-0.5 bg-tertiary"></div>
+<!-- Node 2: Completed -->
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="w-5 h-5 rounded-full bg-tertiary text-on-tertiary flex items-center justify-center text-[11px] font-mono-metric">2</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md text-on-surface">字段校验 &amp; 格式清洗转化</span>
+<span class="text-[10px] text-tertiary font-mono-metric">已完成 · 1,280 条校验全通过</span>
+</div>
+</div>
+<span class="font-mono-metric text-mono-metric text-secondary">18,420ms</span>
+</div>
+<div class="ml-2.5 h-3 w-0.5 bg-error"></div>
+<!-- Node 3: Failed / Interrupted -->
+<div class="flex items-center justify-between bg-error-container/30 p-space-sm rounded-lg border border-error/30">
+<div class="flex items-center gap-space-sm">
+<span class="w-5 h-5 rounded-full bg-error text-on-error flex items-center justify-center text-[11px] font-mono-metric font-bold">3</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md text-error font-semibold">生产表事务提交 (BatchInsert)</span>
+<span class="text-[10px] text-error font-mono-metric font-medium">超时中断 / 写入中止 (未提交)</span>
+</div>
+</div>
+<span class="font-mono-metric text-mono-metric text-error font-semibold">超时 (53s)</span>
+</div>
+</div>
+</div>
+<!-- 3.4 Collapsible Technical Logs & Runtime Inspection -->
+<div class="space-y-space-xs">
+<button class="w-full flex items-center justify-between p-space-sm rounded-lg hover:bg-surface-container transition-colors group" id="toggleTechDetailsBtn">
+<span class="flex items-center gap-space-sm text-label-md font-label-md font-semibold text-on-surface">
+<span class="material-symbols-outlined text-secondary group-hover:text-on-surface text-[16px]">terminal</span>
+              技术调试信息与故障堆栈
+            </span>
+<div class="flex items-center gap-1 text-secondary text-label-sm font-label-sm">
+<span id="techToggleHint">点击折叠详情</span>
+<span class="material-symbols-outlined text-[16px] transition-transform duration-200" id="techToggleIcon">expand_more</span>
+</div>
+</button>
+<!-- Collapsible Content Pane -->
+<div class="space-y-space-sm pt-1" id="techDetailsPane">
+<!-- Monospace Technical Diagnostics Output -->
+<div class="bg-inverse-surface rounded-xl p-space-md text-inverse-on-surface font-mono-code text-[11px] leading-relaxed shadow-inner overflow-x-auto space-y-1">
+<div class="text-secondary-fixed-dim">// Taskdesk Diagnostic Trace v1.4.2 [CRITICAL_EXCEPTION]</div>
+<div><span class="text-error font-bold">[SYS_STATUS]</span> RETURN_CODE: <span class="text-error font-bold">110 (ETIMEDOUT)</span> | STAGE: <span class="text-error">stage_commit</span></div>
+<div><span class="text-primary-fixed font-bold">[METRICS]</span> BUFFER_ROWS: <span class="text-on-primary-container">1280 (PENDING ROLLBACK)</span> | RAM_PEAK: <span class="text-on-primary-container">92.1 MB</span></div>
+<div><span class="text-primary-fixed font-bold">[SECURITY]</span> DB_AUTH: TOKEN_HASH=<span class="text-secondary-fixed-dim">enc_v2_***d9a2</span></div>
+<div><span class="text-primary-fixed font-bold">[DIAGNOSTIC]</span> target_dsn: <span class="text-secondary-fixed-dim">postgresql://app_writer:enc_v2_***d9a2@10.0.12.8:5432/finance_db</span></div>
+<div class="text-outline-variant pt-1">----------------------------------------</div>
+<div>[13:50:21.104] INFO worker::init: task spawned PID=14092</div>
+<div>[13:50:21.344] INFO stage_extract: 1280 rows pulled from upstream</div>
+<div>[13:50:39.764] INFO stage_transform: applied schema v4 rules. 0 rejected</div>
+<div class="text-error">[13:51:33.402] ERROR worker::pool - connection refused by downstream proxy</div>
+<div class="text-error">[13:51:33.405] FATAL stage_commit: batch transaction aborted after 3 retries (ETIMEDOUT)</div>
+<div class="text-tertiary-fixed pt-1">[SUGGESTION] 请检查本机 VPN 状态、数据库白名单或前往工作流管理更新本机凭证。</div>
+</div>
+<div class="flex items-center justify-between px-space-xs text-[10px] text-secondary font-mono-metric">
+<span>Checksum: sha256:8b13e9...f102</span>
+<span>WorkerNode: node-shanghai-01</span>
+</div>
+</div>
+</div>
+</div>
+<!-- 3.5 Persistent Drawer Footer Actions -->
+<div class="p-space-md bg-surface-container-low flex items-center justify-between gap-space-sm flex-shrink-0 border-t border-outline-variant/30">
+<button class="h-8 px-space-md bg-surface-container-lowest hover:bg-surface-container text-on-surface rounded-lg font-label-md text-label-md flex items-center gap-space-xs transition-colors active:scale-[0.98] border border-outline-variant/40">
+<span class="material-symbols-outlined text-[15px]">tune</span>
+<span>前往检查工作流配置</span>
+</button>
+<div class="flex items-center gap-space-sm">
+<button class="h-8 px-space-md bg-surface-container-lowest hover:bg-surface-container text-on-surface rounded-lg font-label-md text-label-md flex items-center gap-space-xs transition-colors active:scale-[0.98] border border-outline-variant/40">
+<span class="material-symbols-outlined text-[15px]">bug_report</span>
+<span>导出故障诊断日志</span>
+</button>
+<!-- Retry Execution CTA -->
+<div class="relative inline-flex rounded-lg overflow-hidden shadow-sm">
+<button class="h-8 px-space-md bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md flex items-center gap-space-xs transition-colors active:scale-[0.98]">
+<span class="material-symbols-outlined text-[15px]">replay</span>
+<span>重试执行</span>
+</button>
+</div>
+</div>
+</div></aside>
+</div>
+</div>
+<script>
+  // Technical details folding toggle behavior
+  const toggleBtn = document.getElementById('toggleTechDetailsBtn');
+  const detailsPane = document.getElementById('techDetailsPane');
+  const toggleIcon = document.getElementById('techToggleIcon');
+  const toggleHint = document.getElementById('techToggleHint');
+
+  let isExpanded = true;
+
+  toggleBtn?.addEventListener('click', () => {
+    isExpanded = !isExpanded;
+    if (isExpanded) {
+      detailsPane.style.display = 'block';
+      toggleIcon.style.transform = 'rotate(0deg)';
+      toggleHint.textContent = '点击折叠详情';
+    } else {
+      detailsPane.style.display = 'none';
+      toggleIcon.style.transform = 'rotate(-90deg)';
+      toggleHint.textContent = '点击展开详情';
+    }
+  });
+
+  // Drawer dismiss simulation
+  const closeBtn = document.getElementById('closeDrawerBtn');
+  const drawer = document.getElementById('detailDrawer');
+
+  closeBtn?.addEventListener('click', () => {
+    if (drawer) {
+      drawer.style.opacity = '0';
+      drawer.style.transform = 'translateX(20px)';
+      setTimeout(() => {
+        drawer.style.display = 'none';
+      }, 200);
+    }
+  });
+</script></main>
+</div>
+</body></html>
