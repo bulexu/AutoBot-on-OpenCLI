@@ -168,15 +168,12 @@ cli({
         ) {
           const session = 'autobot-' + runId;
           const browserCommand = (args: string[]) =>
-            runOpenCli(
-              this.command(['browser', ...args, '--session', session, '-f', 'json'], 30_000),
-              null,
-            );
+            runOpenCli(this.command(['browser', ...args, '--session', session], 30_000), null);
           try {
             result = await executeFlow(manifest, workflow, {
               ...bindServices(request.credentials ?? new Map(), bindings),
               mode: request.mode,
-              inputs: bindings.inputs,
+              inputs: bindings.inputs ?? (bindings.month ? { month: bindings.month } : undefined),
               credentials: request.credentials,
               savePage: (step, page, rows) => store.savePage(runId, step, page, rows),
               onStep: (step) => store.saveStep(runId, step),
