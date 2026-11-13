@@ -1,0 +1,14 @@
+{
+  "manifest": {
+    "id": "browser-page-title",
+    "version": "1.0.0",
+    "schemaVersion": 1,
+    "endpoints": [{ "method": "GET", "origin": "https://example.com", "path": "/" }]
+  },
+  "workflow": {
+    "steps": [
+      { "id": "open", "op": "browser.open", "url": "https://example.com/" },
+      { "id": "title", "op": "browser.title", "url": "https://example.com/" }
+    ]
+  }
+}

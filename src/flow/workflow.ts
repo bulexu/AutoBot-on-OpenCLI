@@ -71,7 +71,13 @@ type WriteStep = {
   baseToken?: string;
   keyExpression?: string;
 };
-type BitableReadStep = { id: string; op: 'bitable.read'; baseToken: string; table: string };
+type BitableReadStep = {
+  id: string;
+  op: 'bitable.read';
+  baseToken: string;
+  table: string;
+  view?: string;
+};
 type TransformStep = { id: string; op: 'records.transform'; sources: string[]; expression: string };
 export type CompetitorStep = {
   id: string;
@@ -83,7 +89,11 @@ export type CompetitorStep = {
   baseToken: string;
   tables: { rates: string; competitors: string; detail: string; summary: string };
 };
-type Step = ReadStep | MapStep | WriteStep | CompetitorStep | BitableReadStep | TransformStep;
+export type BrowserStep =
+  | { id: string; op: 'browser.open'; url: string }
+  | { id: string; op: 'browser.title'; url: string };
+type Step =
+  BrowserStep | ReadStep | MapStep | WriteStep | CompetitorStep | BitableReadStep | TransformStep;
 
 export type Workflow = { steps: Step[] };
 export type Manifest = {
@@ -280,11 +290,8 @@ export function validateFlow(manifestValue: unknown, workflowValue: unknown) {
           if (method !== 'POST') throw new Error('Only POST reads support a request body');
           object(step.body, 'request body');
         }
-        if (
-          step.responseMode !== undefined &&
-          (step.responseMode !== 'exchange' || !step.from || step.pagination)
-        )
-          throw new Error('HTTP exchange requires source records and a single response');
+        if (step.responseMode !== undefined && (step.responseMode !== 'exchange' || !step.from))
+          throw new Error('HTTP exchange requires source records');
         if (
           step.previewInputLimit !== undefined &&
           (step.previewInputLimit !== 'source' || step.responseMode !== 'exchange')
@@ -309,13 +316,21 @@ export function validateFlow(manifestValue: unknown, workflowValue: unknown) {
         if (step.pagination !== undefined) {
           const page = object(step.pagination, 'pagination');
           validatePagination(page, method);
+          if (step.responseMode === 'exchange' && page.maxPages === undefined)
+            throw new Error('Paginated HTTP exchange requires a page limit');
         }
         outputs.add(id);
         break;
       }
+      case 'browser.open':
+      case 'browser.title':
+        assertEndpoint(manifest as Manifest, new URL(string(step.url, 'Browser URL')), 'GET');
+        if (step.op === 'browser.title') outputs.add(id);
+        break;
       case 'bitable.read':
         string(step.baseToken, 'Feishu base token');
         string(step.table, 'Feishu table');
+        if (step.view !== undefined) string(step.view, 'Feishu view');
         outputs.add(id);
         break;
       case 'records.transform':

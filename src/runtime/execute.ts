@@ -7,6 +7,7 @@ import { fetchRead, retryRead, RetryableReadError } from '../integrations/read-r
 import { assertEndpoint, at, mapRecord, recordList, validateFlow } from '../flow/workflow.ts';
 import type {
   BitableReadStep,
+  BrowserStep,
   CompetitorStep,
   Manifest,
   ReadStep,
@@ -37,6 +38,7 @@ export type StepOutcome = {
 };
 
 export type ExecutionOptions = {
+  browser?: (step: BrowserStep) => Promise<RecordData>;
   competitorMonthly?: (
     step: CompetitorStep & { month: string; requestIntervalMs: number },
     options: ExecutionOptions,
@@ -116,7 +118,11 @@ async function readPages(
     headers.set('content-type', 'application/json');
 
   const pagination = step.pagination && createPagination(step.pagination, url, body);
-  const previewLimit = options.mode === 'preview' ? (options.previewPages ?? 2) : Infinity;
+  // A paginated exchange keeps all pages for each sampled input so aggregates are complete.
+  const previewLimit =
+    options.mode === 'preview' && step.responseMode !== 'exchange'
+      ? (options.previewPages ?? 2)
+      : Infinity;
 
   for (let page = 1; ; page++) {
     const data = await retryRead(async () => {
@@ -151,7 +157,14 @@ async function readPages(
     savePage(records);
     for (const record of records) rows.push(record);
 
-    if (!pagination || !pagination.advance(data, records.length)) break;
+    if (
+      !pagination ||
+      !pagination.advance(
+        data,
+        step.responseMode ? recordList(at(data, step.recordsPath)).length : records.length,
+      )
+    )
+      break;
     if (page >= previewLimit) break;
     if (page >= pagination.limit) throw new Error('HTTP pagination exceeded its page limit');
   }
@@ -190,12 +203,31 @@ export async function executeFlow(
   };
   const outputs = new Map<string, RecordData[]>();
   const writes = [];
+  const browserResults: { stepId: string; title: unknown; url: unknown }[] = [];
   for (const [seq, step] of workflow.steps.entries()) {
     // Each step is isolated so a failure names the step that stopped the run,
     // and every settled step reports what it produced so the UI can draw the
     // real execution path instead of guessing it from the failure position.
     const startedAt = Date.now();
     try {
+      if (step.op === 'browser.open' || step.op === 'browser.title') {
+        if (!options.browser) throw new Error('浏览器执行环境未配置');
+        const record = await options.browser(step);
+        if (step.op === 'browser.title') {
+          outputs.set(step.id, [record]);
+          options.savePage?.(step.id, 1, [record]);
+          browserResults.push({ stepId: step.id, title: record.title, url: record.url });
+        }
+        options.onStep?.({
+          seq,
+          stepId: step.id,
+          op: step.op,
+          status: 'succeeded',
+          rows: step.op === 'browser.title' ? 1 : 0,
+          durationMs: Date.now() - startedAt,
+        });
+        continue;
+      }
       if (step.op === 'competitor.monthly') {
         if (!options.competitorMonthly)
           throw new Error('Competitor flow requires configured integrations');
@@ -395,5 +427,10 @@ export async function executeFlow(
       throw tagStepFailure(error, step.id);
     }
   }
-  return { mode: options.mode, writes, ...(warnings.length ? { warnings } : {}) };
+  return {
+    mode: options.mode,
+    writes,
+    ...(browserResults.length ? { browserResults } : {}),
+    ...(warnings.length ? { warnings } : {}),
+  };
 }

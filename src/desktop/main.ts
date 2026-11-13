@@ -201,7 +201,7 @@ else
             id: item.id,
             op: item.op,
             target: item.op === 'bitable.upsert' ? item.target : undefined,
-            url: item.op === 'http.read' ? item.url : undefined,
+            url: 'url' in item ? item.url : undefined,
             method: item.op === 'http.read' ? (item.method ?? 'GET') : undefined,
           })),
           fixedTables: step?.tables,

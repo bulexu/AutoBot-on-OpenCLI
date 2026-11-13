@@ -1,15 +1,16 @@
+import { executeFlow } from './execute.ts';
 import { parseOpenCliDoctor } from './opencli-doctor.ts';
 import { tagStepFailure } from './failure.ts';
 import { execFile } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { at, validateFlow } from '../flow/workflow.ts';
+import { assertEndpoint, at, validateFlow } from '../flow/workflow.ts';
 import { OpenCliError, runOpenCli } from '../integrations/opencli.ts';
 import { RunStore } from '../storage/run-store.ts';
 import type { ExecutionOptions } from './execute.ts';
-import { describeProcessFailure } from './failure.ts';
-import { validateServiceBindings } from './service-bindings.ts';
+import { describeProcessFailure, failureStep } from './failure.ts';
+import { bindServices, validateServiceBindings } from './service-bindings.ts';
 import type { ServiceBindings } from './service-bindings.ts';
 
 type RunnerOptions = {
@@ -162,21 +163,58 @@ cli({
             (step.op === 'competitor.monthly' && step.requestIntervalParameter) ||
             (step.op === 'http.read' && step.intervalParameter),
         );
-        result = await runOpenCli(
-          this.command(['autobot', 'run', '-f', 'json'], paced ? 1_800_000 : 300_000),
-          {
-            manifest,
-            workflow,
-            database,
-            runId,
-            mode: request.mode,
-            bindings,
-            credentials: Array.from(request.credentials ?? [], ([name, credential]) => ({
-              name,
-              ...credential,
-            })),
-          },
-        );
+        if (
+          workflow.steps.some((step) => step.op === 'browser.open' || step.op === 'browser.title')
+        ) {
+          const session = 'autobot-' + runId;
+          const browserCommand = (args: string[]) =>
+            runOpenCli(
+              this.command(['browser', ...args, '--session', session, '-f', 'json'], 30_000),
+              null,
+            );
+          try {
+            result = await executeFlow(manifest, workflow, {
+              ...bindServices(request.credentials ?? new Map(), bindings),
+              mode: request.mode,
+              inputs: bindings.inputs,
+              credentials: request.credentials,
+              savePage: (step, page, rows) => store.savePage(runId, step, page, rows),
+              onStep: (step) => store.saveStep(runId, step),
+              browser: async (step) => {
+                const response = await browserCommand(
+                  step.op === 'browser.open' ? ['open', step.url] : ['state', '--diagnostics'],
+                );
+                const url = at(response, 'url');
+                if (typeof url !== 'string') throw new Error('OpenCLI 未返回浏览器页面地址');
+                assertEndpoint(manifest, new URL(url), 'GET');
+                if (new URL(url).href !== new URL(step.url).href)
+                  throw new Error('浏览器页面与流程声明的地址不一致');
+                if (step.op === 'browser.open') return { url };
+                const title = at(response, 'diagnostics.title');
+                if (typeof title !== 'string') throw new Error('OpenCLI 未返回页面标题');
+                return { url, title };
+              },
+            });
+          } finally {
+            await browserCommand(['close']).catch(() => undefined);
+          }
+        } else {
+          result = await runOpenCli(
+            this.command(['autobot', 'run', '-f', 'json'], paced ? 1_800_000 : 300_000),
+            {
+              manifest,
+              workflow,
+              database,
+              runId,
+              mode: request.mode,
+              bindings,
+              credentials: Array.from(request.credentials ?? [], ([name, credential]) => ({
+                name,
+                ...credential,
+              })),
+            },
+          );
+        }
       } catch (error) {
         // The worker may already have recorded the reason. Read it back so the
         // parent does not overwrite a good diagnosis with a bare status.
@@ -184,11 +222,16 @@ cli({
         const detail = error instanceof OpenCliError ? error.detail : undefined;
         store.finish(runId, 'incomplete', {
           code: recorded?.code ?? (error instanceof OpenCliError ? error.code : 'WORKFLOW_FAILED'),
-          message: recorded?.message ?? detail ?? describeProcessFailure('WORKFLOW_FAILED'),
-          step: recorded?.step,
+          message:
+            recorded?.message ??
+            detail ??
+            (failureStep(error) && error instanceof Error ? error.message : undefined) ??
+            describeProcessFailure('WORKFLOW_FAILED'),
+          step: recorded?.step ?? failureStep(error),
         });
         const failed = new Error(`Run ${runId} failed`, { cause: error });
-        throw recorded?.step ? tagStepFailure(failed, recorded.step) : failed;
+        const step = recorded?.step ?? failureStep(error);
+        throw step ? tagStepFailure(failed, step) : failed;
       }
       const warnings = at(result, 'warnings');
       if (Array.isArray(warnings) && warnings.length) {

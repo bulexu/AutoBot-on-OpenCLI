@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Download, Eye, Pencil, Play, Upload } from '@lucide/vue';
+import { Download, Eye, Pencil, Play, Upload, Workflow } from '@lucide/vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,16 +43,19 @@ const scheduleFeedback = ref('');
 const aliasEditing = ref(false);
 const aliasDraft = ref('');
 const cron = ref('');
-const inputs = ref<Record<string, string>>({});
+const inputs = ref<Record<string, string | number>>({});
 const credentialValues = ref<string[]>([]);
 const targetValues = ref<Record<string, string>>({});
 const baseToken = ref('');
-const result = ref<{ writes: { stepId: string; target: string; count: number }[] } | undefined>(
-  undefined,
-);
+const result = ref<{
+  writes: { stepId: string; target: string; count: number }[];
+  browserResults?: { stepId: string; title: string; url: string }[];
+}>();
 
 const opLabels: Record<string, string> = {
   'competitor.monthly': '竞品月销量抓取',
+  'browser.open': '打开网页',
+  'browser.title': '读取页面标题',
   'http.read': 'HTTP 读取',
   'records.map': '字段映射',
   'bitable.upsert': '写入目标表',
@@ -132,7 +135,7 @@ function exportFlow() {
 function readInputs() {
   const values: Record<string, string | number | boolean> = {};
   for (const field of flow.value.inputs ?? []) {
-    const raw = (inputs.value[field.key] ?? '').trim();
+    const raw = String(inputs.value[field.key] ?? '').trim();
     if (!raw) continue;
     values[field.key] =
       field.type === 'number' ? Number(raw) : field.type === 'boolean' ? raw === 'true' : raw;
@@ -186,25 +189,29 @@ function saveAlias() {
 }
 
 function saveCredentials() {
-  return guard(async () => {
-    flow.value = await api.saveCredentials({
-      values: credentialValues.value,
-      bindings: targets.value.length
-        ? {
-            bitable: {
-              baseToken: baseToken.value,
-              targets: Object.fromEntries(
-                targets.value.map((target) => [target, targetValues.value[target] ?? '']),
-              ),
-            },
-          }
-        : {},
-    });
-    credentialValues.value = [];
-    targetValues.value = {};
-    baseToken.value = '';
-    bindingFeedback.value = '本机凭证已加密保存。';
-  }, '正在保存本机配置…');
+  return guard(
+    async () => {
+      flow.value = await api.saveCredentials({
+        values: credentials.value.map((_, index) => credentialValues.value[index] ?? ''),
+        bindings: targets.value.length
+          ? {
+              bitable: {
+                baseToken: baseToken.value,
+                targets: Object.fromEntries(
+                  targets.value.map((target) => [target, targetValues.value[target] ?? '']),
+                ),
+              },
+            }
+          : {},
+      });
+      credentialValues.value = [];
+      targetValues.value = {};
+      baseToken.value = '';
+      bindingFeedback.value = '本机凭证已加密保存。';
+    },
+    '正在保存本机配置…',
+    bindingFeedback,
+  );
 }
 
 function run(mode: 'preview' | 'replay') {
@@ -294,7 +301,7 @@ onMounted(async () => {
       <section class="panel task" aria-labelledby="flow">
         <div class="task-head">
           <div class="flow-identity">
-            <span class="flow-icon" aria-hidden="true">↳</span>
+            <span class="flow-icon" aria-hidden="true"><Workflow :size="18" /></span>
             <div class="flow-text">
               <h2
                 v-if="!aliasEditing"
@@ -459,7 +466,12 @@ onMounted(async () => {
               <p class="muted credentials-note">
                 凭证使用系统钥匙串加密保存在本机，仅在执行时解密，不随流程包导出。
               </p>
-              <form class="credentials-form" autocomplete="off" @submit.prevent="saveCredentials">
+              <form
+                class="credentials-form"
+                autocomplete="off"
+                novalidate
+                @submit.prevent="saveCredentials"
+              >
                 <FieldGroup class="settings-grid">
                   <Field v-for="field in credentials" :key="field.name">
                     <FieldLabel :for="'cred-' + field.name">{{ field.label }}</FieldLabel>
@@ -467,14 +479,19 @@ onMounted(async () => {
                       :id="'cred-' + field.name"
                       v-model="credentialValues[credentials.indexOf(field)]"
                       type="password"
-                      required
+                      :required="!flow.credentialsSaved"
                       :placeholder="flow.credentialsSaved ? '已配置，留空保留当前值' : undefined"
                     />
                   </Field>
                   <template v-if="targets.length">
                     <Field>
                       <FieldLabel for="base-token">飞书多维表格 Token</FieldLabel>
-                      <Input id="base-token" v-model="baseToken" type="text" required />
+                      <Input
+                        id="base-token"
+                        v-model="baseToken"
+                        type="text"
+                        :required="!flow.credentialsSaved"
+                      />
                     </Field>
                     <Field v-for="target in targets" :key="target">
                       <FieldLabel :for="'target-' + target">目标表 · {{ target }}</FieldLabel>
@@ -482,7 +499,7 @@ onMounted(async () => {
                         :id="'target-' + target"
                         v-model="targetValues[target]"
                         type="text"
-                        required
+                        :required="!flow.credentialsSaved"
                       />
                     </Field>
                   </template>
@@ -534,6 +551,10 @@ onMounted(async () => {
 
         <section v-if="result" class="result">
           <h3 class="metadata-title">执行结果</h3>
+          <div v-for="page in result.browserResults" :key="page.stepId" class="result-group">
+            <span class="break-all">{{ page.url }}</span>
+            <strong>{{ page.title }}</strong>
+          </div>
           <div class="result-groups">
             <div v-for="group in result.writes" :key="group.stepId" class="result-group">
               <span>{{ group.target }}</span>

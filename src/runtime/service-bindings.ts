@@ -44,7 +44,10 @@ export function bindServices(
   return {
     bitableRead: async (step) => {
       const rows = [];
-      for await (const record of (await transportFor(step.baseToken)).records(step.table))
+      for await (const record of (await transportFor(step.baseToken)).records(
+        step.table,
+        step.view,
+      ))
         rows.push(record.fields);
       return rows;
     },

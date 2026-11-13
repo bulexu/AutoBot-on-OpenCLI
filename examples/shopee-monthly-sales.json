@@ -1,0 +1,138 @@
+{
+  "manifest": {
+    "id": "shopee-monthly-sales",
+    "version": "1.0.1",
+    "schemaVersion": 1,
+    "endpoints": [
+      {
+        "method": "POST",
+        "origin": "https://api.menglar.com",
+        "path": "/gateway/shopee-service/api/shopee/item/trend/query"
+      }
+    ],
+    "inputs": [
+      {
+        "key": "month",
+        "label": "抓取月份",
+        "type": "month",
+        "required": true,
+        "default": "2026-08"
+      },
+      {
+        "key": "productFilter",
+        "label": "产品范围",
+        "type": "string"
+      },
+      {
+        "key": "requestIntervalMs",
+        "label": "请求间隔（毫秒）",
+        "type": "number",
+        "default": 1000,
+        "min": 0,
+        "max": 10000
+      },
+      {
+        "key": "allowPartialSummary",
+        "label": "允许汇总已获取的数据（true / false）",
+        "type": "boolean",
+        "default": false
+      }
+    ]
+  },
+  "workflow": {
+    "steps": [
+      {
+        "id": "rates",
+        "op": "bitable.read",
+        "baseToken": "EE7sbElgCaLseDsyuKqc0OcfnZg",
+        "table": "tblc21HFT8OllsN6",
+        "view": "vew79KsI5e"
+      },
+      {
+        "id": "products",
+        "op": "bitable.read",
+        "baseToken": "EE7sbElgCaLseDsyuKqc0OcfnZg",
+        "table": "tbl6tlLDp4WE2isq",
+        "view": "vew5FToYu9"
+      },
+      {
+        "id": "candidates",
+        "op": "records.transform",
+        "sources": ["rates", "products"],
+        "expression": "(\n  $month := inputs.month;\n  $start := $month & \"-01\";\n  $year := $number($substring($month,0,4));\n  $m := $number($substring($month,5,2));\n  $leap := $year % 400 = 0 or ($year % 4 = 0 and $year % 100 != 0);\n  $days := $m = 2 ? ($leap ? 29 : 28) : ($m in [4,6,9,11] ? 30 : 31);\n  $sites := {\"菲律宾\":\"ph\",\"马来西亚\":\"my\",\"泰国\":\"th\",\"越南\":\"vn\",\"巴西\":\"br\",\"新加坡\":\"sg\"};\n  $rates := sources.rates;\n  $scope := inputs.productFilter;\n  $items := sources.products[监控状态 = \"监控中\" and ($not($exists($scope)) or 产品名 = $scope)].(\n    $product := $;\n    $group := $string([产品名, 产品线, 公司]);\n    $assert($boolean(产品名) and $boolean(产品线) and $boolean(公司), \"监控产品缺少产品名、产品线或公司\");\n    $site := $lookup($sites, 国家);\n    $rate := $rates[国家 = $product.国家].汇率;\n    $validRate := $exists($rate) and $count([$rate]) = 1 and $contains($string($rate), /^[0-9]+(\\.[0-9]+)?$/) and $number($rate) > 0;\n    $ids := $split(产品ID ?? \"\", /[,，、;；\\s]+/)[ $ != \"\" ];\n    $not($exists($site)) or $not($validRate) or $count($ids) = 0\n      ? {\"group\":$group,\"warning\":$group & \"：缺少站点、汇率或商品 ID\"}\n      : $ids.(\n          $id := $;\n          $contains($id, /^[1-9][0-9]{0,14}$/)\n            ? {\"key\":$site & \"/\" & $id,\"site\":$site,\"itemId\":$number($id),\"idText\":$id,\"product\":$product.产品名,\n               \"group\":$group,\"rate\":$number($rate),\"startDate\":$start,\"endDate\":$month & \"-\" & $string($days)}\n            : {\"group\":$group,\"warning\":$group & \"：商品 ID 格式无效\"}\n        )\n  );\n  $valid := $items[$exists(key)];\n  $unique := $map($distinct($valid.key), function($key){(\n    $rows := $valid[key = $key];\n    $assert($count($distinct($rows.group)) = 1,\"同一站点的商品 ID 对应多个产品组\");\n    $rows[0]\n  )});\n  {\"records\":[$unique,$items[$exists(warning)]]}\n)"
+      },
+      {
+        "id": "requests",
+        "op": "records.transform",
+        "sources": ["candidates"],
+        "expression": "{\"records\":[sources.candidates[$exists(key)]]}"
+      },
+      {
+        "id": "trend",
+        "op": "http.read",
+        "url": "https://api.menglar.com/gateway/shopee-service/api/shopee/item/trend/query",
+        "method": "POST",
+        "readOnly": true,
+        "headers": {
+          "authorization": "{{secret.menglar-authorization}}"
+        },
+        "from": "requests",
+        "recordsPath": "data",
+        "responseMode": "exchange",
+        "bind": {
+          "body": {
+            "site": "site",
+            "itemId": "itemId",
+            "startDate": "startDate",
+            "endDate": "endDate"
+          }
+        },
+        "intervalParameter": "requestIntervalMs",
+        "pagination": {
+          "strategy": "page",
+          "parameter": "pageNo",
+          "in": "body",
+          "start": 1,
+          "size": 10,
+          "sizeParameter": "pageSize",
+          "totalPath": "total",
+          "maxPages": 10
+        }
+      },
+      {
+        "id": "monthly",
+        "op": "records.transform",
+        "sources": ["trend", "candidates"],
+        "expression": "(\n  $month := inputs.month;\n  $pages := sources.trend;\n  $rows := $map($distinct($pages.input.key), function($key){(\n    $parts := $pages[input.key = $key];\n    $item := $parts[0].input;\n    $daily := $parts.response.data;\n    $invalid := $daily[$not($type(sales) = \"number\" and $type(gmv) = \"number\" and sales >= 0 and gmv >= 0 and\n      itemId = $item.itemId and site = $item.site and $substring(timest,0,7) = $month)];\n    $sales := $sum($daily.sales);\n    $gmv := $sum($daily.gmv);\n    $count($parts[$exists(error) or response.success != true]) > 0 or $count($daily) = 0 or\n      $count($invalid) > 0 or $count($distinct($daily.timest)) != $count($daily) or $count($daily) != $parts[0].response.total\n      ? {\"group\":$item.group,\"warning\":$key & \"：接口错误、无数据或分页未收齐\"}\n      : {\"group\":$item.group,\"fields\":{\"月份\":$month,\"产品ID\":$item.idText,\"平台\":\"shopee-\" & $item.site,\n           \"产品名\":$item.product,\"销量\":$sales,\"单价\":$sales > 0 ? $gmv / $sales : 0,\n           \"汇率\":$item.rate,\"销额\":$gmv * $item.rate}}\n  )});\n  $all := [$rows,sources.candidates[$exists(warning)]];\n  $assert($exists($all.fields),\"没有可用的 Shopee 月度记录，请检查监控配置和接口返回\");\n  {\"records\":$all,\"warnings\":[$all.warning]}\n)"
+      },
+      {
+        "id": "detailRows",
+        "op": "records.transform",
+        "sources": ["monthly"],
+        "expression": "{\"records\":[sources.monthly.fields]}"
+      },
+      {
+        "id": "summaryRows",
+        "op": "records.transform",
+        "sources": ["monthly"],
+        "expression": "(\n  $rows := sources.monthly;\n  $allowPartial := inputs.allowPartialSummary = true;\n  $bad := $distinct($rows[$exists(warning)].group);\n  $groups := $distinct($rows[$exists(fields)].group);\n  {\"records\":[$map($groups[$allowPartial or $not($ in $bad)],function($key){(\n    $fields := $rows[group = $key].fields;\n    $group := $parseJSON($key);\n    $sales := $sum($fields.销量);\n    $gmv := $sum($fields.销额);\n    {\"月份\":inputs.month,\"产品名\":$group[0],\"产品线\":$group[1],\"公司\":$group[2],\n     \"国内线上销量\":$sales,\"国内线上客单价\":$sales > 0 ? $gmv / $sales : 0,\"国内线上销额预估\":$gmv}\n  )})],\"warnings\":[$count($bad) > 0 ? ($allowPartial ? \"按已获取数据计算部分汇总，涉及 \" & $count($bad) & \" 个不完整组\" : \"跳过 \" & $count($bad) & \" 个数据不完整的汇总组\")]}\n)"
+      },
+      {
+        "id": "detail",
+        "op": "bitable.upsert",
+        "baseToken": "EE7sbElgCaLseDsyuKqc0OcfnZg",
+        "target": "tbl4xNAJYDhGDyCf",
+        "from": "detailRows",
+        "keyExpression": "$string([月份, 平台, 产品ID])"
+      },
+      {
+        "id": "summary",
+        "op": "bitable.upsert",
+        "baseToken": "EE7sbElgCaLseDsyuKqc0OcfnZg",
+        "target": "tbl4t2SHG80SK2lf",
+        "from": "summaryRows",
+        "keyExpression": "$string([月份, 产品名, 产品线, 公司])"
+      }
+    ]
+  }
+}
