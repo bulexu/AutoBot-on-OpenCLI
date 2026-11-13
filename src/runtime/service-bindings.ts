@@ -1,7 +1,7 @@
 import { validMonth } from '../flow/workflow.ts';
+import { createCompetitorMonthlyRunner } from './competitor-monthly.ts';
 import { createBitableWriter } from '../integrations/bitable.ts';
 import { createFeishuRecords } from '../integrations/feishu-fields.ts';
-import { createCompetitorMonthlyRunner } from './competitor-monthly.ts';
 import type { ExecutionOptions } from './execute.ts';
 
 export type ServiceBindings = {
@@ -24,29 +24,48 @@ function requiredCredential(
 export function bindServices(
   credentials: NonNullable<ExecutionOptions['credentials']>,
   bindings: ServiceBindings,
-): Pick<ExecutionOptions, 'competitorMonthly' | 'upsert'> {
-  const application = () => ({
-    appId: requiredCredential(credentials, 'lark-app-id', 'https://open.feishu.cn'),
-    appSecret: requiredCredential(credentials, 'lark-app-secret', 'https://open.feishu.cn'),
-  });
+): Pick<ExecutionOptions, 'competitorMonthly' | 'bitableRead' | 'upsert'> {
+  const transports = new Map<string, ReturnType<typeof createFeishuRecords>>();
+  const transportFor = (baseToken: string) => {
+    let transport = transports.get(baseToken);
+    if (!transport) {
+      transport = createFeishuRecords(
+        {
+          appId: requiredCredential(credentials, 'lark-app-id', 'https://open.feishu.cn'),
+          appSecret: requiredCredential(credentials, 'lark-app-secret', 'https://open.feishu.cn'),
+        },
+        baseToken,
+      );
+      transports.set(baseToken, transport);
+    }
+    return transport;
+  };
   const bitable = bindings.bitable;
-  let transport: ReturnType<typeof createFeishuRecords> | undefined;
   return {
+    bitableRead: async (step) => {
+      const rows = [];
+      for await (const record of (await transportFor(step.baseToken)).records(step.table))
+        rows.push(record.fields);
+      return rows;
+    },
     competitorMonthly: (step, options) =>
       createCompetitorMonthlyRunner(
-        application(),
+        {
+          appId: requiredCredential(credentials, 'lark-app-id', 'https://open.feishu.cn'),
+          appSecret: requiredCredential(credentials, 'lark-app-secret', 'https://open.feishu.cn'),
+        },
         requiredCredential(credentials, 'sellersprite-secret-key', 'https://mcp.sellersprite.com'),
         bindings.productFilter,
       )(step, options),
-    upsert:
-      bitable &&
-      (async (step, records) => {
-        const table = Object.hasOwn(bitable.targets, step.target) && bitable.targets[step.target];
-        if (!table) throw new Error(`Missing Bitable target binding: ${step.target}`);
-        transport ??= createFeishuRecords(application(), bitable.baseToken);
-        const writer = createBitableWriter(await transport, 100);
-        await writer({ ...step, target: table }, records);
-      }),
+    upsert: async (step, records, key) => {
+      const baseToken = step.baseToken ?? bitable?.baseToken;
+      const table = step.baseToken
+        ? step.target
+        : bitable && Object.hasOwn(bitable.targets, step.target) && bitable.targets[step.target];
+      if (!baseToken || !table) throw new Error(`Missing Bitable target binding: ${step.target}`);
+      const writer = createBitableWriter(await transportFor(baseToken), 100, key);
+      await writer({ ...step, target: table }, records);
+    },
   };
 }
 
@@ -57,19 +76,18 @@ export function validateServiceBindings(value: unknown): ServiceBindings {
   }
   const result: ServiceBindings = {};
   if ('productFilter' in value && value.productFilter !== undefined) {
-    if (typeof value.productFilter !== 'string' || !value.productFilter.trim()) {
+    if (typeof value.productFilter !== 'string' || !value.productFilter.trim())
       throw new Error('Invalid product filter');
-    }
     result.productFilter = value.productFilter;
+  }
+  if ('month' in value && value.month !== undefined) {
+    if (!validMonth(value.month)) throw new Error('月份格式应为 YYYY-MM');
+    result.month = value.month;
   }
   if ('inputs' in value && value.inputs !== undefined) {
     if (!value.inputs || typeof value.inputs !== 'object' || Array.isArray(value.inputs))
       throw new Error('无效的流程参数');
     result.inputs = value.inputs as Record<string, unknown>;
-  }
-  if ('month' in value && value.month !== undefined) {
-    if (!validMonth(value.month)) throw new Error('月份格式应为 YYYY-MM');
-    result.month = value.month;
   }
   if ('bitable' in value && value.bitable !== undefined) {
     const binding = value.bitable;
@@ -83,13 +101,11 @@ export function validateServiceBindings(value: unknown): ServiceBindings {
       !binding.targets ||
       typeof binding.targets !== 'object' ||
       Array.isArray(binding.targets)
-    ) {
+    )
       throw new Error('Invalid Bitable bindings');
-    }
     const entries = Object.entries(binding.targets);
-    if (entries.some(([, id]) => typeof id !== 'string' || !id.trim())) {
+    if (entries.some(([, id]) => typeof id !== 'string' || !id.trim()))
       throw new Error('Invalid Bitable table binding');
-    }
     result.bitable = { baseToken: binding.baseToken, targets: Object.fromEntries(entries) };
   }
   return result;

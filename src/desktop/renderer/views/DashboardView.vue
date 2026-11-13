@@ -31,7 +31,14 @@ import {
 import RunDetailDialog from '@/components/app/RunDetailDialog.vue';
 import { api } from '@/ipc';
 import type { RunRecord } from '@/ipc';
-import { dateFormat, formatDuration, modeLabels, statusLabels, timeFormat } from '@/lib/format';
+import {
+  dateFormat,
+  formatDuration,
+  modeLabels,
+  runStatus,
+  statusLabels,
+  timeFormat,
+} from '@/lib/format';
 
 const runs = ref<RunRecord[]>([]);
 const statusFilter = ref('all');
@@ -45,7 +52,7 @@ const active = computed(() => runs.value.filter((record) => record.status === 'r
 const visible = computed(() => {
   const term = searchTerm.value.trim().toLowerCase();
   return runs.value.filter((record) => {
-    if (statusFilter.value !== 'all' && record.status !== statusFilter.value) return false;
+    if (statusFilter.value !== 'all' && runStatus(record) !== statusFilter.value) return false;
     if (term && !record.task_id.toLowerCase().includes(term)) return false;
     return true;
   });
@@ -60,7 +67,8 @@ const tiles = computed(() => {
   const records = runs.value;
   const completed = records.filter((record) => record.status !== 'running');
   const succeeded = records.filter((record) => record.status === 'succeeded').length;
-  const incomplete = records.filter((record) => record.status === 'incomplete').length;
+  const incomplete = records.filter((record) => runStatus(record) === 'incomplete').length;
+  const partial = records.filter((record) => runStatus(record) === 'partial').length;
   const running = records.filter((record) => record.status === 'running').length;
   const durations = completed
     .filter((record) => record.started_at && record.finished_at)
@@ -80,6 +88,7 @@ const tiles = computed(() => {
       unit: completed.length ? '%' : '',
       note: completed.length ? succeeded + ' / ' + completed.length + ' 已结束' : '暂无已结束执行',
     },
+    { label: '部分完成', value: String(partial), unit: '次', state: 'partial' },
     { label: '未完成', value: String(incomplete), unit: '次' },
     { label: '运行中', value: String(running), unit: '次' },
     {
@@ -158,7 +167,7 @@ onUnmounted(() => {
         <Card v-for="tile in tiles" :key="tile.label" class="stat-tile">
           <CardContent class="stat-body">
             <span class="stat-label">{{ tile.label }}</span>
-            <span class="stat-value">
+            <span class="stat-value" :data-state="tile.state">
               {{ tile.value }}<span v-if="tile.unit" class="stat-unit">{{ tile.unit }}</span>
             </span>
             <span v-if="tile.note" class="stat-note muted">{{ tile.note }}</span>
@@ -184,6 +193,7 @@ onUnmounted(() => {
             <SelectContent>
               <SelectItem value="all">全部状态</SelectItem>
               <SelectItem value="succeeded">成功</SelectItem>
+              <SelectItem value="partial">部分完成</SelectItem>
               <SelectItem value="incomplete">未完成</SelectItem>
               <SelectItem value="running">运行中</SelectItem>
             </SelectContent>
@@ -222,8 +232,8 @@ onUnmounted(() => {
               }}</Badge>
             </TableCell>
             <TableCell>
-              <span class="run-state" :data-state="record.status">
-                {{ statusLabels[record.status] ?? record.status }}
+              <span class="run-state" :data-state="runStatus(record)">
+                {{ statusLabels[runStatus(record)] ?? record.status }}
               </span>
             </TableCell>
             <TableCell class="cell-time">

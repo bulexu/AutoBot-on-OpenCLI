@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { flowExpression } from '../flow/expression.ts';
-import { readResponse } from '../integrations/http-response.ts';
+import { parseJsonValue, readResponse } from '../integrations/http-response.ts';
 import { resolveInputs } from '../flow/inputs.ts';
 import type { InputValue } from '../flow/inputs.ts';
 import { fetchRead, retryRead, RetryableReadError } from '../integrations/read-retry.ts';
@@ -49,7 +49,11 @@ export type ExecutionOptions = {
   fetch?: typeof fetch;
   savePage?: (stepId: string, page: number, records: RecordData[]) => void;
   bitableRead?: (step: BitableReadStep) => Promise<RecordData[]>;
-  upsert?: (step: WriteStep, records: RecordData[], key?: (record: RecordData) => Promise<unknown>) => Promise<void>;
+  upsert?: (
+    step: WriteStep,
+    records: RecordData[],
+    key?: (record: RecordData) => Promise<unknown>,
+  ) => Promise<void>;
   onWarning?: (message: string) => void;
   onStep?: (outcome: StepOutcome) => void;
 };
@@ -129,13 +133,21 @@ async function readPages(
         throw new Error(`Source API returned HTTP ${response.status}`);
       }
       const data = await readResponse(response, body.id);
-      if (step.retry && at(data, step.retry.path) === step.retry.value)
-        throw new RetryableReadError('Source API rate limit', step.retry.waitMs);
+      if (step.retry) {
+        const retryValue =
+          at(data, step.retry.path) ??
+          (step.retry.encodedPath
+            ? at(parseJsonValue(at(data, step.retry.encodedPath)), step.retry.decodedPath ?? '$')
+            : undefined);
+        if (retryValue === step.retry.value)
+          throw new RetryableReadError('Source API rate limit', step.retry.waitMs);
+      }
       return data;
     });
-    const records = step.responseMode === 'exchange'
-      ? [{ input, response: data }]
-      : recordList(at(data, step.recordsPath));
+    const records =
+      step.responseMode === 'exchange'
+        ? [{ input, response: data }]
+        : recordList(at(data, step.recordsPath));
     savePage(records);
     for (const record of records) rows.push(record);
 
@@ -212,30 +224,65 @@ export async function executeFlow(
         continue;
       }
       if (step.op === 'bitable.read' || step.op === 'records.transform') {
-        const records = step.op === 'bitable.read'
-          ? await options.bitableRead?.(step)
-          : await flowExpression(step.expression)({
-              inputs: parameters,
-              sources: Object.fromEntries(step.sources.map((source) => [source, outputs.get(source)])),
-            });
-        const rows = step.op === 'bitable.read' ? recordList(records) : recordList(at(records, 'records'));
+        if (step.op === 'bitable.read' && !options.bitableRead)
+          throw new Error('Bitable reader unavailable');
+        const records =
+          step.op === 'bitable.read'
+            ? await options.bitableRead?.(step)
+            : await flowExpression(step.expression)({
+                inputs: parameters,
+                mode: options.mode,
+                sources: Object.fromEntries(
+                  step.sources.map((source) => [source, outputs.get(source)]),
+                ),
+              });
+        const transformed = at(records, 'records');
+        if (
+          step.op === 'records.transform' &&
+          (!records || typeof records !== 'object' || Array.isArray(records))
+        )
+          throw new Error('Transformation must return a records object');
+        // JSONata collapses a sequence with one item to a scalar and omits empty sequences.
+        const rows =
+          step.op === 'bitable.read'
+            ? recordList(records)
+            : recordList(
+                transformed === undefined
+                  ? []
+                  : Array.isArray(transformed)
+                    ? transformed
+                    : [transformed],
+              );
         const notices = step.op === 'records.transform' ? at(records, 'warnings') : undefined;
-        if (Array.isArray(notices)) for (const notice of notices) {
-          if (typeof notice === 'string') options.onWarning?.(notice);
-        }
-        if (!records) throw new Error('Bitable reader unavailable');
+        if (Array.isArray(notices))
+          for (const notice of notices) {
+            if (typeof notice === 'string') options.onWarning?.(notice);
+          }
         outputs.set(step.id, rows);
         if (step.op === 'records.transform') options.savePage?.(step.id, 1, rows);
-        options.onStep?.({ seq, stepId: step.id, op: step.op, status: 'succeeded', rows: rows.length, durationMs: Date.now() - startedAt });
+        options.onStep?.({
+          seq,
+          stepId: step.id,
+          op: step.op,
+          status: 'succeeded',
+          rows: rows.length,
+          durationMs: Date.now() - startedAt,
+        });
         continue;
       }
       if (step.op === 'http.read') {
         const inputs = step.from ? outputs.get(step.from)! : [undefined];
-        const selected = options.mode === 'preview' ? inputs.slice(0, 2) : inputs;
+        const selected =
+          options.mode === 'preview' && step.previewInputLimit !== 'source'
+            ? inputs.slice(0, 2)
+            : inputs;
         const records: RecordData[] = [];
         let page = 0;
-        const interval = step.intervalParameter ? Number(parameters[step.intervalParameter] ?? 0) : 0;
-        if (interval < 0 || interval > 10_000) throw new Error('HTTP 请求间隔必须在 0–10000 毫秒之间');
+        const interval = step.intervalParameter
+          ? Number(parameters[step.intervalParameter] ?? 0)
+          : 0;
+        if (interval < 0 || interval > 10_000)
+          throw new Error('HTTP 请求间隔必须在 0–10000 毫秒之间');
         let nextRequestAt = 0;
         let rateLimited = false;
         const pace = async () => {
@@ -248,15 +295,27 @@ export async function executeFlow(
         for (const [index, input] of selected.entries()) {
           try {
             if (rateLimited) throw new Error('本次运行已触发限流保护');
-            const result = await readPages(step, manifest, options, input, parameters, (rows) => {
-              page++;
-              if (!step.responseMode) options.savePage?.(step.id, page, rows);
-            }, pace);
+            const result = await readPages(
+              step,
+              manifest,
+              options,
+              input,
+              parameters,
+              (rows) => {
+                page++;
+                if (!step.responseMode) options.savePage?.(step.id, page, rows);
+              },
+              pace,
+            );
             for (const row of result) records.push(row);
           } catch (error) {
             if (!step.from) throw error;
             failures++;
-            if (step.stopOnRateLimit && error instanceof RetryableReadError && /rate limit|429/.test(error.message))
+            if (
+              step.stopOnRateLimit &&
+              error instanceof RetryableReadError &&
+              /rate limit|429/.test(error.message)
+            )
               rateLimited = true;
             if (step.responseMode === 'exchange') {
               records.push({ input, error: error instanceof Error ? error.message : '请求失败' });

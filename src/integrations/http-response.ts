@@ -14,3 +14,12 @@ export async function readResponse(response: Response, requestId: unknown): Prom
   }
   throw new Error('API event stream did not contain the request result');
 }
+
+export function parseJsonValue(value: unknown): unknown {
+  if (typeof value !== 'string') return undefined;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return undefined;
+  }
+}

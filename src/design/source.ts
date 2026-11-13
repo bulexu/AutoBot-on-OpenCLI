@@ -85,6 +85,7 @@ export function parseCurl(
   const sanitizedHeaders = Object.fromEntries(
     [...headers].map(([name, value]) => {
       if (name === 'content-type' || name === 'accept') return [name, value];
+      if (/^\{\{secret\.[\w-]+\}\}$/.test(value)) return [name, value];
       const key = 'source-' + name;
       if (!/^[\w-]+$/.test(key)) throw new Error('请求头名称不支持凭证占位符');
       credentials.set(key, { origin, value });

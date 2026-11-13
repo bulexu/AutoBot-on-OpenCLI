@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('autobot', {
   sendDesignMessage: (value) => ipcRenderer.invoke('design:message', value),
   sendRpaMessage: (value) => ipcRenderer.invoke('design:rpa-message', value),
   resetDesign: (mode) => ipcRenderer.invoke('design:reset', mode),
-  runtimeStatus: () => ipcRenderer.invoke('runtime:status'),
+  runtimeStatus: (diagnose) => ipcRenderer.invoke('runtime:status', diagnose),
   recentRuns: () => ipcRenderer.invoke('runs:list'),
   taskRuns: (id) => ipcRenderer.invoke('runs:task', id),
   runDetail: (id) => ipcRenderer.invoke('runs:detail', id),

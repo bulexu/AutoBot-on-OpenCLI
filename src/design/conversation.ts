@@ -1,7 +1,13 @@
 import type { DesignTurn, RpaProposal, RpaTurn } from './model.ts';
 import { parseCurl, responseShape } from './source.ts';
 
-type DesignInput = { curl: string; sample: string; goal: string; readOnlyPost: boolean };
+type DesignInput = {
+  curl: string;
+  sample: string;
+  goal: string;
+  readOnlyPost: boolean;
+  reuseCredentials?: true;
+};
 type DesignResult = { ready: boolean; message?: string };
 type Guide = (turns: DesignTurn[], nextMaterial: string) => Promise<string>;
 type Design = (input: DesignInput) => Promise<DesignResult>;
@@ -12,6 +18,7 @@ export class DesignConversation {
   private goal = '';
   private readOnlyPost = false;
   private awaitingPostConfirmation = false;
+  private reuseCredentials = false;
 
   private turns: DesignTurn[] = [];
 
@@ -40,6 +47,8 @@ export class DesignConversation {
       } else if (/^[\[{]/.test(part)) {
         responseShape(part);
         this.sample = part;
+      } else if (part === '使用当前流程凭证试跑') {
+        this.reuseCredentials = true;
       } else if (part === '确认只读 POST' && this.awaitingPostConfirmation) {
         this.readOnlyPost = true;
         this.awaitingPostConfirmation = false;
@@ -58,11 +67,19 @@ export class DesignConversation {
       }
     }
 
-    const userText = conversationalParts.join('\n') || '已在客户端提交接口资料。';
+    const userText =
+      conversationalParts
+        .join('\n')
+        .replace(/\b(?:tbl[A-Za-z0-9]+|[A-Za-z0-9]{20,})\b/g, '[本机标识]') ||
+      '已在客户端提交接口资料。';
     this.turns.push({ role: 'human', text: userText });
     this.turns = this.turns.slice(-12);
     const ask = async (nextMaterial: string) => {
-      const reply = guide ? await guide(this.turns, nextMaterial) : nextMaterial;
+      const reply = guide
+        ? await guide(this.turns, nextMaterial).catch(
+            () => '模型暂未回复，资料已保留。' + nextMaterial,
+          )
+        : nextMaterial;
       this.turns.push({ role: 'assistant', text: reply });
       return { reply };
     };
@@ -91,6 +108,7 @@ export class DesignConversation {
       sample: this.sample,
       goal: this.goal,
       readOnlyPost: this.readOnlyPost,
+      ...(this.reuseCredentials ? { reuseCredentials: true } : {}),
     });
     return {
       reply: result.ready

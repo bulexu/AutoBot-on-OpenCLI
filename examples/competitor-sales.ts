@@ -71,7 +71,9 @@ if (command === 'pack') {
     ...flow,
     taskId: flow.manifest.id,
     mode: command,
-    bindings: { productFilter: scope },
+    bindings: flow.manifest.inputs?.some((input) => input.key === 'productFilter')
+      ? { inputs: scope ? { productFilter: scope } : {} }
+      : { productFilter: scope },
     credentials: new Map([
       ['lark-app-id', { origin: 'https://open.feishu.cn', value: LARK_APP_ID }],
       ['lark-app-secret', { origin: 'https://open.feishu.cn', value: LARK_APP_SECRET }],

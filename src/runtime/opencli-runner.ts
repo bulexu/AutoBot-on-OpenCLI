@@ -1,3 +1,5 @@
+import { parseOpenCliDoctor } from './opencli-doctor.ts';
+import { tagStepFailure } from './failure.ts';
 import { execFile } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
@@ -90,6 +92,19 @@ export class OpenCliRunner {
     });
   }
 
+  async doctor() {
+    const command = this.command(['doctor'], 20_000);
+    const stdout = await new Promise<string>((resolve, reject) => {
+      execFile(
+        command.executable,
+        command.args,
+        { env: command.env, timeout: command.timeoutMs, maxBuffer: 128 * 1024, windowsHide: true },
+        (error, output) => (error ? reject(error) : resolve(output)),
+      );
+    });
+    return parseOpenCliDoctor(stdout);
+  }
+
   async run(request: RunRequest) {
     if (this.running) throw new Error('Another workflow is already running');
     this.running = true;
@@ -143,7 +158,9 @@ cli({
       let result: unknown;
       try {
         const paced = workflow.steps.some(
-          (step) => step.op === 'competitor.monthly' && step.requestIntervalParameter,
+          (step) =>
+            (step.op === 'competitor.monthly' && step.requestIntervalParameter) ||
+            (step.op === 'http.read' && step.intervalParameter),
         );
         result = await runOpenCli(
           this.command(['autobot', 'run', '-f', 'json'], paced ? 1_800_000 : 300_000),
@@ -170,7 +187,8 @@ cli({
           message: recorded?.message ?? detail ?? describeProcessFailure('WORKFLOW_FAILED'),
           step: recorded?.step,
         });
-        throw new Error(`Run ${runId} failed`, { cause: error });
+        const failed = new Error(`Run ${runId} failed`, { cause: error });
+        throw recorded?.step ? tagStepFailure(failed, recorded.step) : failed;
       }
       const warnings = at(result, 'warnings');
       if (Array.isArray(warnings) && warnings.length) {

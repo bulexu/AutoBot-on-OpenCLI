@@ -1,3 +1,5 @@
+import type { RunRecord } from '@/ipc';
+
 /** Shared formatters for run records, so every view renders the same numbers. */
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' });
@@ -32,7 +34,14 @@ export const statusLabels: Record<string, string> = {
   running: '运行中',
   succeeded: '成功',
   incomplete: '未完成',
+  partial: '部分完成',
 };
+
+export function runStatus(record: Pick<RunRecord, 'status' | 'failure_code'>) {
+  return record.status === 'incomplete' && record.failure_code === 'PARTIAL_RESULT'
+    ? 'partial'
+    : record.status;
+}
 
 export const modeLabels: Record<string, string> = {
   preview: '只读预览',

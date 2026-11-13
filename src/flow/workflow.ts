@@ -49,15 +49,27 @@ type ReadStep = {
   bind?: { query?: Record<string, string>; body?: Record<string, string> };
   pagination?: HttpPagination;
   responseMode?: 'exchange';
+  previewInputLimit?: 'source';
   intervalParameter?: string;
-  retry?: { path: string; value: string; waitMs: number };
+  retry?: {
+    path: string;
+    value: string;
+    waitMs: number;
+    encodedPath?: string;
+    decodedPath?: string;
+  };
   stopOnRateLimit?: boolean;
 };
 
 type MapStep = { id: string; op: 'records.map'; from: string; fields: Record<string, Field> };
 type WriteStep = {
-  id: string; op: 'bitable.upsert'; from: string; target: string; key: string;
-  baseToken?: string; keyExpression?: string;
+  id: string;
+  op: 'bitable.upsert';
+  from: string;
+  target: string;
+  key: string;
+  baseToken?: string;
+  keyExpression?: string;
 };
 type BitableReadStep = { id: string; op: 'bitable.read'; baseToken: string; table: string };
 type TransformStep = { id: string; op: 'records.transform'; sources: string[]; expression: string };
@@ -268,15 +280,27 @@ export function validateFlow(manifestValue: unknown, workflowValue: unknown) {
           if (method !== 'POST') throw new Error('Only POST reads support a request body');
           object(step.body, 'request body');
         }
-        if (step.responseMode !== undefined && (step.responseMode !== 'exchange' || !step.from || step.pagination))
+        if (
+          step.responseMode !== undefined &&
+          (step.responseMode !== 'exchange' || !step.from || step.pagination)
+        )
           throw new Error('HTTP exchange requires source records and a single response');
-        if (step.intervalParameter !== undefined && !inputs.some(
-          (input) => input.key === step.intervalParameter && input.type === 'number',
-        )) throw new Error('HTTP interval requires a declared numeric input');
+        if (
+          step.previewInputLimit !== undefined &&
+          (step.previewInputLimit !== 'source' || step.responseMode !== 'exchange')
+        )
+          throw new Error('Preview source limit requires an HTTP exchange');
+        if (
+          step.intervalParameter !== undefined &&
+          !inputs.some((input) => input.key === step.intervalParameter && input.type === 'number')
+        )
+          throw new Error('HTTP interval requires a declared numeric input');
         if (step.retry !== undefined) {
           const retry = object(step.retry, 'HTTP retry condition');
           string(retry.path, 'retry path');
           string(retry.value, 'retry value');
+          if (retry.encodedPath !== undefined) string(retry.encodedPath, 'encoded response path');
+          if (retry.decodedPath !== undefined) string(retry.decodedPath, 'decoded response path');
           integer(retry.waitMs, 0, 'retry wait');
           if (Number(retry.waitMs) > 60_000) throw new Error('HTTP retry wait exceeds 60 seconds');
         }
@@ -322,7 +346,8 @@ export function validateFlow(manifestValue: unknown, workflowValue: unknown) {
           throw new Error('Upsert requires a preceding record output');
         string(step.target, 'target binding');
         if (step.baseToken !== undefined) string(step.baseToken, 'Feishu base token');
-        if (step.keyExpression !== undefined) flowExpression(string(step.keyExpression, 'record key expression'));
+        if (step.keyExpression !== undefined)
+          flowExpression(string(step.keyExpression, 'record key expression'));
         else string(step.key, 'source key field');
         break;
       default:

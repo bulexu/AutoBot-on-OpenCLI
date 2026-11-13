@@ -370,6 +370,17 @@
   color: var(--color-danger);
 }
 
+.run-state[data-state='partial'] {
+  padding: 0.16rem 0.45rem;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #854d0e;
+}
+
+.stat-value[data-state='partial'] {
+  color: #854d0e;
+}
+
 .run-state[data-state='running'] {
   color: var(--color-accent-brand);
 }
@@ -699,6 +710,20 @@
   border: 1px solid var(--color-danger);
   border-radius: var(--radius-lg);
   background: var(--color-danger-soft);
+}
+
+.diagnosis[data-state='partial'] {
+  border-color: #eab308;
+  background: #fffbeb;
+}
+
+.diagnosis[data-state='partial'] .diagnosis-head strong,
+.diagnosis[data-state='partial'] .diagnosis-badge {
+  color: #854d0e;
+}
+
+.diagnosis[data-state='partial'] .diagnosis-badge {
+  background: #fde68a;
 }
 
 .diagnosis-head {
@@ -1228,8 +1253,4 @@
 .flow-tabs [role='tab'][data-state='active'] {
   background: var(--color-accent-brand);
   color: white;
-}
-
-.model-settings-fields {
-  width: min(100%, 36rem);
 }

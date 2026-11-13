@@ -64,6 +64,7 @@ async function send(text: string) {
   if (current === 'api') {
     awaitingPost.value = false;
     draft.value = undefined;
+    draftOpen.value = false;
   }
 
   busy.value = true;
@@ -81,7 +82,10 @@ async function send(text: string) {
     }
     feedback.value = '';
   } catch (error) {
-    feedback.value = error instanceof Error ? error.message : String(error);
+    feedback.value = (error instanceof Error ? error.message : String(error)).replace(
+      /^Error invoking remote method '[^']+': (?:Error: )?/,
+      '',
+    );
   } finally {
     busy.value = false;
   }
@@ -99,6 +103,7 @@ async function reset() {
     if (current === 'api') {
       awaitingPost.value = false;
       draft.value = undefined;
+      draftOpen.value = false;
     } else {
       rpaSteps.value = [];
     }
@@ -202,7 +207,12 @@ async function exportDraft() {
         </ol>
       </details>
 
-      <details v-if="draft?.ready && isApi" class="draft-result">
+      <details
+        v-if="draft?.ready && isApi"
+        class="draft-result"
+        :open="draftOpen"
+        @toggle="draftOpen = ($event.target as HTMLDetailsElement).open"
+      >
         <summary>查看流程草稿与试跑结果</summary>
         <pre>{{ JSON.stringify({ flow: draft.flow, preview: draft.preview }, null, 2) }}</pre>
       </details>

@@ -31,7 +31,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/ipc';
 import type { FlowStatus, RunRecord } from '@/ipc';
-import { dateFormat, formatDuration, modeLabels, statusLabels } from '@/lib/format';
+import { dateFormat, formatDuration, modeLabels, runStatus, statusLabels } from '@/lib/format';
 
 const flow = ref<FlowStatus>({});
 const runs = ref<RunRecord[]>([]);
@@ -516,8 +516,8 @@ onMounted(async () => {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <span class="run-state" :data-state="record.status">
-                      {{ statusLabels[record.status] ?? record.status }}
+                    <span class="run-state" :data-state="runStatus(record)">
+                      {{ statusLabels[runStatus(record)] ?? record.status }}
                     </span>
                   </TableCell>
                   <TableCell class="cell-time">

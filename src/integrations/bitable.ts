@@ -21,7 +21,8 @@ export class BitableWriteError extends Error {
 export function createBitableWriter(
   transport: BitableTransport,
   batchSize: number,
-  matchKey = (row: RecordData, step: WriteStep) => at(row, step.key),
+  matchKey: (row: RecordData, step: WriteStep) => unknown | Promise<unknown> = (row, step) =>
+    at(row, step.key),
 ) {
   if (!Number.isSafeInteger(batchSize) || batchSize < 1)
     throw new Error('Invalid Bitable batch size');
@@ -30,9 +31,10 @@ export function createBitableWriter(
     if (rows.length === 0) return;
 
     const matching = new Map<string, string>();
-    const keys = new Set(rows.map((row) => String(matchKey(row, step))));
+    const sourceKeys = await Promise.all(rows.map((row) => matchKey(row, step)));
+    const keys = new Set(sourceKeys.map(String));
     for await (const record of transport.records(step.target)) {
-      const key = matchKey(record.fields, step);
+      const key = await matchKey(record.fields, step);
       if (key == null || !keys.has(String(key))) continue;
       if (matching.has(String(key))) throw new Error('Multiple Bitable records match a source key');
       matching.set(String(key), record.recordId);
@@ -40,8 +42,8 @@ export function createBitableWriter(
 
     const creates: RecordData[] = [];
     const updates: TargetRecord[] = [];
-    for (const fields of rows) {
-      const recordId = matching.get(String(matchKey(fields, step)));
+    for (const [index, fields] of rows.entries()) {
+      const recordId = matching.get(String(sourceKeys[index]));
       if (recordId === undefined) creates.push(fields);
       else updates.push({ recordId, fields });
     }

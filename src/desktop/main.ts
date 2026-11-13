@@ -45,8 +45,11 @@ else
       async function loadModelConfig() {
         try {
           const encrypted = await readFile(modelFile);
-          const decrypted = await safeStorage.decryptStringAsync(encrypted);
-          return parseModelConfig(JSON.parse(decrypted.result));
+          const plain = await safeStorage
+            .decryptStringAsync(encrypted)
+            .then(({ result }) => result)
+            .catch(() => safeStorage.decryptString(encrypted));
+          return parseModelConfig(JSON.parse(plain));
         } catch (error) {
           if (missing(error)) return undefined;
           throw new Error('无法读取已保存的模型配置，请重新保存配置');
@@ -364,9 +367,10 @@ else
         return status();
       });
 
+      let schedulerScanning = false;
       async function scheduleTick() {
-        if (running || mutationPending) return;
-        mutationPending = true;
+        if (schedulerScanning || running || mutationPending) return;
+        schedulerScanning = true;
         try {
           for (const active of await installedFlows()) {
             const id = active.manifest.id;
@@ -374,20 +378,32 @@ else
             const due = dueOccurrence(config);
             if (due === undefined || !(await runtime).ready || !(await credentialsReady(active)))
               continue;
-            await savePreferences(id, { ...config, since: due });
+            if (running || mutationPending) return;
+            mutationPending = true;
             try {
-              await runInstalled(
-                active,
-                'replay',
-                savedInputs(config, active.manifest.inputs ?? []),
-              );
-            } catch (error) {
-              console.error('Scheduled workflow failed:', id, error);
+              // Refresh the package and schedule after acquiring the mutation lock.
+              const current = (await installedFlows()).find((item) => item.manifest.id === id);
+              if (!current) continue;
+              const latest = await preferences(id);
+              const occurrence = dueOccurrence(latest);
+              if (occurrence === undefined || !(await credentialsReady(current))) continue;
+              await savePreferences(id, { ...latest, since: occurrence });
+              try {
+                await runInstalled(
+                  current,
+                  'replay',
+                  savedInputs(latest, current.manifest.inputs ?? []),
+                );
+              } catch (error) {
+                console.error('Scheduled workflow failed:', id, error);
+              }
+              window.webContents.send('runs:changed');
+            } finally {
+              mutationPending = false;
             }
-            window.webContents.send('runs:changed');
           }
         } finally {
-          mutationPending = false;
+          schedulerScanning = false;
         }
       }
 
@@ -435,7 +451,16 @@ else
         return publicModelConfig(config);
       });
 
-      handle('runtime:status', async () => runtime);
+      handle('runtime:status', async (diagnose) => {
+        if (diagnose !== true) return runtime;
+        const runtimeVersion = await runner.version().catch(() => undefined);
+        if (!runtimeVersion) return { ready: false };
+        try {
+          return { ready: true, runtimeVersion, browser: await runner.doctor() };
+        } catch {
+          return { ready: true, runtimeVersion, browserError: '浏览器诊断失败，请重新检查。' };
+        }
+      });
 
       handle('runs:list', async () => {
         const store = new RunStore(database);
@@ -497,6 +522,7 @@ else
           const options = config
             ? { apiKey: config.ak, model: config.model, baseURL: config.base_url }
             : undefined;
+          const installedFlowForDesign = flow;
           return await conversation.send(
             value,
             async (input) => {
@@ -508,16 +534,45 @@ else
               design = await startDesign(
                 input,
                 createProposer(options),
-                async (flow, credentials) => {
+                async (flow, suppliedCredentials) => {
+                  const credentials = new Map(suppliedCredentials);
+                  const required = bindingFields(flow.workflow).credentials;
+                  const missing = required.filter(({ name }) => !credentials.has(name));
+                  if (missing.length && input.reuseCredentials) {
+                    const active = await installedFlowForDesign();
+                    if (active) {
+                      const encrypted = await readFile(vaultPath(active.manifest.id));
+                      const decrypted = await safeStorage.decryptStringAsync(encrypted);
+                      const saved = readDesktopBindings(
+                        active.workflow,
+                        JSON.parse(decrypted.result),
+                      );
+                      for (const { name, origin } of missing) {
+                        const credential = saved.credentials.get(name);
+                        if (credential?.origin === origin) credentials.set(name, credential);
+                      }
+                    }
+                  }
+                  if (required.some(({ name, origin }) => credentials.get(name)?.origin !== origin))
+                    throw new Error(
+                      '试跑缺少凭证。可发送「使用当前流程凭证试跑」复用已配置的同名凭证。',
+                    );
                   const trial = await runner.run({
                     ...flow,
                     taskId: flow.manifest.id,
                     mode: 'preview',
                     credentials,
                   });
-                  const count = at(trial.result, 'writes.0.count');
-                  if (typeof count !== 'number' || count < 1)
-                    throw new Error('试跑未返回可验证的记录');
+                  const writes = at(trial.result, 'writes');
+                  if (
+                    !Array.isArray(writes) ||
+                    !writes.length ||
+                    writes.some((item) => {
+                      const count = at(item, 'count');
+                      return typeof count !== 'number' || count < 1;
+                    })
+                  )
+                    throw new Error('试跑有目标表未返回可验证的记录');
                   return trial;
                 },
               );

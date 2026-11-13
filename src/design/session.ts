@@ -13,6 +13,8 @@ import { endpoint, validateFlow } from '../flow/workflow.ts';
 import type { Manifest, Workflow } from '../flow/workflow.ts';
 import type { ExecutionOptions } from '../runtime/execute.ts';
 import type { Proposal, Propose } from './model.ts';
+import { failureStep } from '../runtime/failure.ts';
+import { compileWorkflowProposal, WorkflowProposalError } from './workflow-proposal.ts';
 import { parseCurl, responseShape } from './source.ts';
 
 type Flow = { manifest: Manifest; workflow: Workflow };
@@ -110,31 +112,69 @@ export async function startDesign(
     }
   }
 
+  const identifiers = [...new Set(goal.match(/\b(?:tbl[A-Za-z0-9]+|[A-Za-z0-9]{20,})\b/g))];
+  const aliases = new Map(
+    identifiers.map((value, index) => [
+      value,
+      (value.startsWith('tbl') ? 'tblFlowRef' : 'BaseFlowRef') + (index + 1),
+    ]),
+  );
+  const modelGoal = goal.replace(/\b(?:tbl[A-Za-z0-9]+|[A-Za-z0-9]{20,})\b/g, (value) =>
+    aliases.get(value)!,
+  );
+  const originalByAlias = new Map([...aliases].map(([value, alias]) => [alias, value]));
+
+  const maxAttempts = new Set(goal.match(/\btbl[A-Za-z0-9]+\b/g)).size > 1 ? 3 : 2;
   const id = 'api-sync-' + randomUUID();
   const graph = new StateGraph(DesignState)
     .addNode('draft', async (state) => {
       const proposal = await propose({
         request: modelRequest,
         response,
-        goal,
+        goal: modelGoal,
         diagnostic: state.diagnostic,
         previous: state.diagnostic ? state.proposal : undefined,
       });
       const attempts = state.attempts + 1;
       if (proposal.missing) return { attempts, needsInput: proposal.missing, flow: undefined };
       try {
+        if (!proposal.workflowJson && new Set(goal.match(/\btbl[A-Za-z0-9]+\b/g)).size > 1)
+          throw new Error('多表同步需要完整流程定义');
         return {
           attempts,
           proposal,
-          flow: compileProposal(request, proposal, id),
+          flow: proposal.workflowJson
+            ? compileWorkflowProposal(
+                request,
+                proposal.workflowJson.replace(
+                  /\b(?:tblFlowRef|BaseFlowRef)\d+\b/g,
+                  (alias) => originalByAlias.get(alias) ?? alias,
+                ),
+                id,
+                goal,
+              )
+            : compileProposal(request, proposal, id),
           diagnostic: undefined,
         };
-      } catch {
+      } catch (error) {
+        const syntaxCode =
+          error &&
+          typeof error === 'object' &&
+          'code' in error &&
+          typeof error.code === 'string' &&
+          /^S\d{4}$/.test(error.code)
+            ? error.code
+            : undefined;
         return {
           attempts,
           proposal,
           flow: undefined,
-          diagnostic: '草稿的记录路径、分页参数或写入键未通过校验',
+          diagnostic:
+            error instanceof WorkflowProposalError
+              ? error.message
+              : syntaxCode
+                ? 'JSONata 表达式语法错误 ' + syntaxCode
+                : '草稿的流程结构、记录路径、分页参数或写入键未通过校验',
         };
       }
     })
@@ -142,8 +182,19 @@ export async function startDesign(
       if (!state.flow) throw new Error('没有可试跑的草稿');
       try {
         return { preview: await preview(state.flow, credentials), diagnostic: undefined };
-      } catch {
-        return { diagnostic: '只读试跑失败，请检查记录路径、分页和字段映射' };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        if (message.startsWith('试跑缺少凭证'))
+          return { needsInput: message, diagnostic: undefined };
+        const step = failureStep(error);
+        return {
+          diagnostic:
+            step && /^[\w-]{1,64}$/.test(step)
+              ? '只读试跑失败，检查步骤 ' + step + ' 的表达式、输入路径和输出结构'
+              : message.startsWith('试跑有目标表未返回可验证的记录')
+                ? message
+                : '只读试跑失败，请检查记录路径、分页和字段映射',
+        };
       }
     })
     .addNode('confirm', () => ({
@@ -155,13 +206,20 @@ export async function startDesign(
       (state) => {
         if (state.needsInput) return END;
         if (state.flow) return 'trial';
-        return state.attempts < 2 ? 'draft' : END;
+        return state.attempts < maxAttempts ? 'draft' : END;
       },
       ['draft', 'trial', END],
     )
     .addConditionalEdges(
       'trial',
-      (state) => (state.diagnostic ? (state.attempts < 2 ? 'draft' : END) : 'confirm'),
+      (state) =>
+        state.needsInput
+          ? END
+          : state.diagnostic
+            ? state.attempts < maxAttempts
+              ? 'draft'
+              : END
+            : 'confirm',
       ['draft', 'confirm', END],
     )
     .addEdge('confirm', END)

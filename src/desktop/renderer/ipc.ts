@@ -1,3 +1,4 @@
+import type { BrowserDoctor } from '../../runtime/opencli-doctor.ts';
 /**
  * Typed view of the `window.autobot` bridge that the preload script exposes.
  *
@@ -87,6 +88,8 @@ export interface ModelConfig {
 export interface RuntimeStatus {
   ready: boolean;
   runtimeVersion?: string;
+  browser?: BrowserDoctor;
+  browserError?: string;
 }
 
 export interface DesignDraft {
@@ -120,7 +123,7 @@ export interface AutobotApi {
   sendDesignMessage(value: string): Promise<DesignResponse>;
   sendRpaMessage(value: string): Promise<RpaResponse>;
   resetDesign(mode: 'api' | 'rpa'): Promise<void>;
-  runtimeStatus(): Promise<RuntimeStatus>;
+  runtimeStatus(diagnose?: boolean): Promise<RuntimeStatus>;
   recentRuns(): Promise<RunRecord[]>;
   taskRuns(id: string): Promise<RunRecord[]>;
   runDetail(id: string): Promise<RunRecord>;

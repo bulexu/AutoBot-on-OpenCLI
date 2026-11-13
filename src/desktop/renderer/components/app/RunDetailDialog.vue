@@ -16,6 +16,7 @@ import {
   failureSummary,
   formatDuration,
   modeLabels,
+  runStatus,
 } from '@/lib/format';
 
 const props = defineProps<{ record?: RunRecord; flow?: FlowStatus }>();
@@ -47,9 +48,11 @@ const diagnosis = computed(() => {
   const record = shown.value;
   if (!record || record.status !== 'incomplete' || !record.failure_message) return undefined;
   const code = record.failure_code || 'WORKFLOW_FAILED';
+  const state = runStatus(record);
   return {
     code,
-    summary: failureSummary[code] ? failureSummary[code] + '：执行中断' : '执行中断',
+    state,
+    summary: state === 'partial' ? '部分完成' : (failureSummary[code] ?? '执行中断'),
     reason: record.failure_message,
     advice: failureAdvice[code] ?? '',
   };
@@ -179,7 +182,7 @@ const note = computed(() => {
         </div>
       </div>
 
-      <section v-if="diagnosis" class="diagnosis">
+      <section v-if="diagnosis" class="diagnosis" :data-state="diagnosis.state">
         <div class="diagnosis-head">
           <Badge class="diagnosis-badge">{{ diagnosis.code }}</Badge>
           <strong>{{ diagnosis.summary }}</strong>

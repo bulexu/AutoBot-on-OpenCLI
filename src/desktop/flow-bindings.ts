@@ -17,9 +17,9 @@ export function bindingFields(workflow: Workflow) {
         label: '卖家精灵 Secret Key',
         origin: 'https://mcp.sellersprite.com',
       });
-    } else if (step.op === 'bitable.upsert') {
+    } else if (step.op === 'bitable.upsert' || step.op === 'bitable.read') {
       for (const item of feishu) credentials.set(item.name, item);
-      targets.add(step.target);
+      if (step.op === 'bitable.upsert' && !step.baseToken) targets.add(step.target);
     } else if (step.op === 'http.read') {
       for (const [header, value] of Object.entries(step.headers ?? {})) {
         const name = value.match(/^\{\{secret\.([\w-]+)\}\}$/)?.[1];

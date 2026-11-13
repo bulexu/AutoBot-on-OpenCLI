@@ -5,14 +5,14 @@ import AppSidebar from '@/components/app/AppSidebar.vue';
 import DashboardView from '@/views/DashboardView.vue';
 import FlowsView from '@/views/FlowsView.vue';
 import SettingsView from '@/views/SettingsView.vue';
-import WorkbenchView from '@/views/WorkbenchView.vue';
+import FlowDesignGuideView from '@/views/FlowDesignGuideView.vue';
 import { api } from '@/ipc';
 import type { FlowStatus, RuntimeStatus } from '@/ipc';
 
 const tabs = [
   { id: 'dashboard', label: '执行看板', icon: 'dashboard' },
   { id: 'flows', label: '工作流管理', icon: 'flows' },
-  { id: 'workbench', label: '工作台', icon: 'workbench' },
+  { id: 'workbench', label: 'Flow 设计说明', icon: 'workbench' },
   { id: 'settings', label: '系统设置', icon: 'settings' },
 ] as const;
 
@@ -59,7 +59,7 @@ const view = computed(() => {
     case 'flows':
       return FlowsView;
     case 'workbench':
-      return WorkbenchView;
+      return FlowDesignGuideView;
     case 'settings':
       return SettingsView;
     default:
@@ -101,7 +101,7 @@ onUnmounted(() => {
     <div class="app-shell">
       <AppSidebar :tabs="tabs" :active="selectedTab" :runtime="runtime" @select="selectTab" />
       <main class="app-content">
-        <component :is="view" />
+        <component :is="view" @open-flows="selectTab('flows')" />
       </main>
     </div>
   </TooltipProvider>
